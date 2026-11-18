@@ -226,7 +226,7 @@ const ResumeAnalyzer = () => {
       const serverMsg =
         err.response?.data?.message ||
         (err.message?.includes('Network Error')
-          ? 'Could not connect to backend server at localhost:5000. Please ensure the server is running.'
+          ? 'Could not connect to backend server at http://localhost:5000. Please ensure the backend is running (cd server && npm run dev).'
           : err.message);
 
       setUploadError(serverMsg);

@@ -30,6 +30,10 @@ let isMocked = false;
 export const setupMockDb = () => {
   if (isMocked) return;
   isMocked = true;
+  process.env.NODE_ENV = 'test';
+  try {
+    mongoose.connection.readyState = 1;
+  } catch {}
 
   // Mock User
   User.findOne = (query) => {

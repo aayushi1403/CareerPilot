@@ -5,8 +5,16 @@ import { ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings } from '@langchain
  * @returns {boolean}
  */
 export function isGeminiConfigured() {
+  if (process.env.NODE_ENV === 'test') {
+    return false;
+  }
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  return Boolean(key && key.trim().length > 10 && !key.includes('your_google_gemini_api_key'));
+  return Boolean(
+    key &&
+    key.trim().length > 10 &&
+    !key.includes('your_google_gemini_api_key') &&
+    key.startsWith('AIza')
+  );
 }
 
 /**

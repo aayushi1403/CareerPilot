@@ -1,12 +1,18 @@
+import mongoose from 'mongoose';
 import { verifyToken } from '../utils/jwt.js';
 import User from '../models/User.js';
 import { errorResponse } from '../utils/apiResponse.js';
+
+const isDbAvailable = () => mongoose.connection.readyState === 1 || process.env.NODE_ENV === 'test';
 
 export const protect = async (req, res, next) => {
   let token;
 
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
+    const parts = req.headers.authorization.split(' ');
+    if (parts.length > 1) {
+      token = parts.slice(1).join(' ').trim();
+    }
   }
 
   if (!token) {
@@ -15,7 +21,23 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = verifyToken(token);
-    const user = await User.findById(decoded.id).select('-password');
+
+    let user;
+    if (isDbAvailable()) {
+      user = await User.findById(decoded.id).select('-password');
+    } else if (process.env.NODE_ENV !== 'production') {
+      // In-memory development demo session
+      user = {
+        _id: decoded.id || '673c11111111111111111111',
+        name: decoded.name || 'Alex Mercer',
+        email: decoded.email || 'alex.mercer@careerpilot.io',
+        targetJobRole: 'Full-Stack Developer',
+        skills: ['React', 'JavaScript', 'Node.js', 'Git'],
+        role: 'user',
+      };
+    } else {
+      user = await User.findById(decoded.id).select('-password');
+    }
 
     if (!user) {
       return errorResponse(res, 401, 'User associated with this token no longer exists.');
@@ -30,4 +52,3 @@ export const protect = async (req, res, next) => {
     return errorResponse(res, 401, 'Invalid authentication token.');
   }
 };
-

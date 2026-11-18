@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 import request from 'supertest';
 import JSZip from 'jszip';
+import jwt from 'jsonwebtoken';
 import app from '../src/app.js';
 import { setupMockDb, resetMemoryStore } from './mockDb.js';
 
@@ -166,6 +167,38 @@ startxref
 
     assert.strictEqual(res.status, 401);
     assert.strictEqual(res.body.success, false);
+    assert.ok(res.body.message.includes('No authentication token provided'));
+  });
+
+  await t.test('POST /api/resumes/upload - Fail with expired token', async () => {
+    const validPdfBuffer = createValidPdfBuffer();
+    const expiredToken = jwt.sign(
+      { id: 'some_user_id', email: 'expired@demo.dev' },
+      process.env.JWT_SECRET || 'your_super_secret_jwt_key_change_in_production',
+      { expiresIn: '-10s' }
+    );
+
+    const res = await request(app)
+      .post('/api/resumes/upload')
+      .set('Authorization', `Bearer ${expiredToken}`)
+      .attach('resume', validPdfBuffer, 'elena_resume.pdf');
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(res.body.success, false);
+    assert.ok(res.body.message.includes('expired'));
+  });
+
+  await t.test('POST /api/resumes/upload - Fail with invalid token', async () => {
+    const validPdfBuffer = createValidPdfBuffer();
+
+    const res = await request(app)
+      .post('/api/resumes/upload')
+      .set('Authorization', 'Bearer invalid.tampered.token')
+      .attach('resume', validPdfBuffer, 'elena_resume.pdf');
+
+    assert.strictEqual(res.status, 401);
+    assert.strictEqual(res.body.success, false);
+    assert.ok(res.body.message.includes('Invalid authentication token'));
   });
 
   await t.test('GET /api/resumes - Retrieve all uploaded resumes for user', async () => {

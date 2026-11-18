@@ -70,7 +70,13 @@ export async function ensureAuthToken() {
  * @returns {Promise<Object>}
  */
 export async function uploadResumeApi(file, onProgress) {
-  await ensureAuthToken();
+  const token = await ensureAuthToken();
+
+  if (!token) {
+    throw new Error(
+      'Could not connect to the CareerPilot backend server. Please verify that the backend is running at http://localhost:5000 (run "npm run dev" inside the server/ directory).'
+    );
+  }
 
   const formData = new FormData();
   formData.append('resume', file);
@@ -78,6 +84,7 @@ export async function uploadResumeApi(file, onProgress) {
   const response = await apiClient.post('/resumes/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
+      Authorization: `Bearer ${token}`,
     },
     onUploadProgress: (progressEvent) => {
       if (progressEvent.total) {
