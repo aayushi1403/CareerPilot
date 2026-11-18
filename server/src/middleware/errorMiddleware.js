@@ -11,7 +11,9 @@ export const notFound = (req, res, _next) => {
  * Central Error Handler Middleware
  */
 export const errorHandler = (err, req, res, _next) => {
-  console.error('[Error Middleware]:', err);
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('[Error Middleware]:', err.message);
+  }
 
   // Mongoose bad ObjectId
   if (err.name === 'CastError') {
@@ -44,5 +46,10 @@ export const errorHandler = (err, req, res, _next) => {
   }
 
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  return errorResponse(res, statusCode, err.message || 'Internal Server Error');
+  const message =
+    process.env.NODE_ENV === 'production' && statusCode === 500
+      ? 'An unexpected error occurred on the server. Please try again later.'
+      : err.message || 'Internal Server Error';
+
+  return errorResponse(res, statusCode, message);
 };

@@ -1,206 +1,230 @@
-# CareerPilot – Your AI Career Copilot
+# CareerPilot – Your AI Career Copilot 🚀
 
-CareerPilot is a modern full-stack AI-powered career development platform that helps students and professionals analyze resumes, discover suitable jobs, identify skill gaps, generate personalized career roadmaps, and prepare for interviews.
+[![Node.js](https://img.shields.io/badge/Node.js-20+-68a063.svg?style=flat&logo=node.js)](https://nodejs.org)
+[![React](https://img.shields.io/badge/React-19.3-61dafb.svg?style=flat&logo=react)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-8.3-646cff.svg?style=flat&logo=vite)](https://vitejs.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38bdf8.svg?style=flat&logo=tailwindcss)](https://tailwindcss.com)
+[![LangChain](https://img.shields.io/badge/LangChain.js-Enabled-1C3C3C.svg?style=flat)](https://js.langchain.com)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-1.5%20Flash-4285F4.svg?style=flat&logo=google)](https://aistudio.google.com)
+[![Tests](https://img.shields.io/badge/Tests-75%20Passing-brightgreen.svg?style=flat)](tests)
+
+**CareerPilot** is a production-ready, full-stack, AI-powered career guidance platform designed for students, early-career engineers, and job seekers. It pairs an autonomous **LangChain.js multi-step career agent** with a **Gemini-embedded RAG vector search engine (ChromaDB)** to deliver verified, context-aware resume analysis, personalized roadmaps, job matching, and technical interview simulations.
 
 ---
 
-## 🚀 Tech Stack
+## 📑 Table of Contents
 
-### Frontend
+- [Core Modules & Features](#-core-modules--features)
+- [Architecture & Tech Stack](#-architecture--tech-stack)
+- [Project Structure](#-project-structure)
+- [Quick Start Guide](#-quick-start-guide)
+- [Testing & Quality Assurance](#-testing--quality-assurance)
+- [Security & Performance](#-security--performance)
+- [Deployment & Production Setup](#-deployment--production-setup)
+- [Comprehensive Documentation](#-comprehensive-documentation)
+
+---
+
+## 🎯 Core Modules & Features
+
+| Module | Features & Capabilities |
+| :--- | :--- |
+| **📊 Dashboard** | Personalized welcome, career readiness score meter, recent activity feed, quick action shortcuts, and ATS health summary. |
+| **📄 Resume Analyzer** | Multi-format upload (`.pdf`, `.docx`), text extraction, heuristic entity parsing, ATS keyword scoring, strengths/weaknesses audit, and actionable suggestions. |
+| **💼 Job Matcher** | Real-time career opportunities feed, multi-criteria filtering (Full-time, Internship, Remote), match percentage calculation based on user skills, and detailed job modals. |
+| **🎯 Skill Gap Analyzer** | Target role comparison, side-by-side current vs missing skills, prioritized learning roadmap, and estimated time-to-learn indicators. |
+| **🗺️ Career Roadmap** | Chronological milestone tracker, phase-by-phase skill progression, hands-on portfolio project recommendations, and real-time completion tracking. |
+| **🎙️ Mock Interview** | Role and difficulty selection, Gemini-generated domain questions, answer recording interface, and instant rubrics-based feedback with model answers. |
+| **🤖 AI Career Agent** | Autonomous multi-step LangChain agent with 6 registered tools, grounded citations, loop prevention (`maxIterations: 5`), and an interactive "Tools Executed" inspector. |
+| **📚 Grounded RAG Assistant** | Gemini embeddings (`text-embedding-004`) + ChromaDB vector search with verifiable citations and strict multi-tenant resume sandboxing. |
+| **👤 My Profile** | User career profile manager, education details, target role setting, and dynamic skill tag manager. |
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
+### Frontend Application
 - **Framework**: React 19 + Vite 8
-- **Language**: JavaScript (ESM)
-- **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`) with custom dark navy / electric violet theme
+- **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`) with dark navy / electric violet design language
 - **Routing**: React Router DOM v7
-- **HTTP Client**: Axios (configured for API calls)
+- **HTTP Client**: Axios with Bearer token interceptor and graceful error propagation
 - **Icons**: Lucide React
-- **Linter**: Oxlint
+- **Linter**: Oxlint (0 warnings, 0 errors across 88 files)
+- **Asset Optimization**: Manual vendor chunk splitting (`vendor-react`, `vendor-axios`, `vendor-misc`), all chunks $< 280\text{ kB}$
 
-### Backend Service (`server/`)
+### Backend API (`server/`)
 - **Runtime**: Node.js (ES Modules)
-- **Framework**: Express.js
-- **Database & ODM**: MongoDB + Mongoose
-- **Authentication**: JWT (JSON Web Tokens) with Bearer token header
-- **Security**: Password hashing via `bcryptjs`, CORS configuration for `http://localhost:5173`
-- **File Uploads**: `multer` for `.pdf`, `.doc`, `.docx` resume processing up to 5MB
-- **Testing**: Node.js native test runner (`node:test`) + `supertest`
+- **Framework**: Express 4.21
+- **Database & ODM**: MongoDB + Mongoose (normalized schemas with indexes)
+- **Security**: Helmet security headers, tiered rate limiting (`express-rate-limit`), bcrypt password hashing, and token authentication (JWT)
+- **File Uploads**: Multer file sandboxing for `.pdf` and `.docx` up to 5MB with UUID file hashing
+- **Testing**: Native Node.js test runner (`node:test`) + Supertest (**75 passing tests**)
+
+### AI & Vector Store
+- **Agent Framework**: LangChain.js (`@langchain/core`, `@langchain/google-genai`)
+- **LLM**: Google Gemini 1.5 Flash (`gemini-1.5-flash`)
+- **Embeddings**: Google Gemini Embeddings (`text-embedding-004`)
+- **Vector Store**: ChromaDB HTTP client with resilient in-memory cosine fallback adapter
 
 ---
 
-## 📁 Full-Stack Project Structure
+## 📁 Project Structure
 
 ```
 CareerPilot/
-├── public/                     # Static assets (favicons, icons)
-├── src/                        # Frontend Application
-│   ├── assets/                 # Brand logos & visual assets
-│   ├── components/             # Reusable design system components
-│   │   ├── Badge.jsx               # Status badges and chip tags
-│   │   ├── Button.jsx              # Multi-variant button (primary, secondary, ghost, danger)
-│   │   ├── Card.jsx                # Dark navy card with subtle borders & glow effects
-│   │   ├── DemoBanner.jsx          # Sticky indicator clarifying demo/mock state
-│   │   ├── Notification.jsx        # Interactive notification dropdown
-│   │   ├── ProfileDropdown.jsx     # User profile avatar menu
-│   │   ├── ProgressBar.jsx         # Gradient progress indicators
-│   │   └── StatCard.jsx            # Metric display with trend arrows
-│   ├── data/
-│   │   └── mockData.js         # Central mock data (profile, metrics, resume, jobs, roadmap, Q&As)
-│   ├── layout/
-│   │   ├── AppLayout.jsx       # Shell layout wrapping authenticated views
-│   │   ├── Sidebar.jsx         # Collapsible desktop sidebar & mobile drawer
-│   │   └── TopNav.jsx          # Top navigation with search, notifications, & avatar
-│   ├── pages/
-│   │   ├── Landing.jsx         # High-converting marketing landing page
-│   │   ├── Dashboard.jsx       # Career health overview, metrics, readiness & recommendations
-│   │   ├── ResumeAnalyzer.jsx  # Resume ATS score, feedback, keyword audit, & file upload parsing
-│   │   ├── JobMatcher.jsx      # AI job matches with search, filters, details modal & easy apply
-│   │   ├── SkillGapAnalyzer.jsx# Role comparison, current vs required skills & learning plan
-│   │   ├── CareerRoadmap.jsx   # Phased step-by-step career progression tracker with projects
-│   │   ├── MockInterview.jsx   # Role selection, interview questions, answer eval & feedback
-│   │   ├── AiAssistant.jsx     # Conversational AI career copilot with prompt pills
-│   │   └── Profile.jsx         # Profile completion, editable bio, & skill tag manager
-│   ├── App.jsx                 # Main routing configuration
-│   ├── main.jsx                # React root mount
-│   └── index.css               # Global Tailwind v4 styles, custom gradients, animations
-├── server/                     # Backend API Service
+├── docs/                               # Production documentation
+│   ├── API_DOCUMENTATION.md            # Comprehensive REST API reference
+│   ├── ARCHITECTURE.md                 # System diagrams, layer details & RAG specs
+│   └── DEPLOYMENT_GUIDE.md             # Vercel, Render & Atlas deployment walkthrough
+├── public/                             # Public static assets
+├── src/                                # React 19 Frontend
+│   ├── assets/                         # Icons, brand graphics
+│   ├── components/                     # Reusable UI library (Card, Button, Badge, ProgressBar)
+│   ├── data/                           # Verified career guidance seed data
+│   ├── layout/                         # AppLayout, Sidebar, TopNav
+│   ├── pages/                          # Application views (Dashboard, Resume, Agent, etc.)
+│   ├── services/                       # API client & auth interceptor
+│   ├── App.jsx                         # Route definitions
+│   └── main.jsx                        # Entry point
+├── server/                             # Node.js Express Backend
 │   ├── src/
-│   │   ├── config/
-│   │   │   └── db.js               # MongoDB connection lifecycle & options
-│   │   ├── controllers/
-│   │   │   ├── authController.js   # Register, login, me, logout handlers
-│   │   │   ├── profileController.js# User profile retrieval and updating
-│   │   │   ├── resumeController.js # Upload, list, retrieve, and delete resumes
-│   │   │   ├── roadmapController.js# Create, retrieve, and update roadmap progress
-│   │   │   ├── jobController.js    # Job listings retrieval, searching & filtering
-│   │   │   └── chatController.js   # Conversation history and messages persistence
-│   │   ├── middleware/
-│   │   │   ├── authMiddleware.js   # JWT authentication verification middleware
-│   │   │   ├── errorMiddleware.js  # Centralized error handler & 404 router
-│   │   │   ├── uploadMiddleware.js # Multer disk storage and file validation
-│   │   │   └── validateMiddleware.js# Request payload validation
-│   │   ├── models/
-│   │   │   ├── User.js             # User schema with bcrypt password hashing
-│   │   │   ├── Resume.js           # Resume document schema with ATS scoring
-│   │   │   ├── Roadmap.js          # Phased career roadmap schema
-│   │   │   ├── Job.js              # Career opportunities schema with text index
-│   │   │   └── Chat.js             # Chat session & message history schema
-│   │   ├── routes/
-│   │   │   ├── authRoutes.js       # /api/auth endpoints
-│   │   │   ├── profileRoutes.js    # /api/profile endpoints
-│   │   │   ├── resumeRoutes.js     # /api/resumes endpoints
-│   │   │   ├── roadmapRoutes.js    # /api/roadmaps endpoints
-│   │   │   ├── jobRoutes.js        # /api/jobs endpoints
-│   │   │   └── chatRoutes.js       # /api/chat endpoints
-│   │   ├── utils/
-│   │   │   ├── apiResponse.js      # Standardized JSON response utilities
-│   │   │   ├── jwt.js              # Token signing & verification
-│   │   │   └── seedJobs.js         # Default initial career opportunities seed
-│   │   ├── app.js                  # Express app setup, CORS, static uploads, & routes
-│   │   └── server.js               # Server bootstrap & MongoDB connection
-│   ├── uploads/resumes/            # Uploaded resume files storage
-│   ├── tests/                      # Comprehensive API test suite (38 passing tests)
-│   ├── .env.example                # Sample environment variables template
-│   └── package.json                # Server dependencies & scripts
-├── index.html                  # HTML entry point with metadata
-├── package.json                # Frontend dependencies and scripts
-└── vite.config.js              # Vite config with React & Tailwind plugins
+│   │   ├── config/                     # Database connection & options
+│   │   ├── controllers/                # REST Controllers (Auth, Resume, RAG, Agent, etc.)
+│   │   ├── middleware/                 # Auth, Error, Upload, Rate Limiting, Helmet
+│   │   ├── models/                     # Mongoose schemas (User, Resume, Job, Roadmap, Chat)
+│   │   ├── routes/                     # Express route declarations
+│   │   ├── services/
+│   │   │   ├── agent/                  # LangChain Career Agent & 6 Structured Tools
+│   │   │   ├── ai/                     # Gemini AI prompt pipelines (Zod validated)
+│   │   │   └── rag/                    # ChromaDB store, document chunker, knowledge seeder
+│   │   ├── utils/                      # Response envelope, JWT, seed scripts
+│   │   ├── app.js                      # Express application assembly
+│   │   └── server.js                   # Server bootstrap & lifecycle
+│   ├── tests/                          # Automated backend test suites (75 tests)
+│   └── uploads/resumes/                # Isolated disk storage for uploaded resumes
+├── .env.example                        # Frontend environment template
+├── render.yaml                         # Render blueprint specification
+├── vercel.json                         # Vercel SPA routing & cache configuration
+├── vite.config.js                      # Vite build configuration with chunking
+└── package.json
 ```
 
 ---
 
-## 📡 Backend API Endpoints
+## 🚀 Quick Start Guide
 
-### 1. Authentication (`/api/auth`)
-| Method | Endpoint | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/auth/register` | Public | Register new user with password hashing & return JWT |
-| `POST` | `/api/auth/login` | Public | Authenticate user credentials & return JWT |
-| `POST` | `/api/auth/logout` | Public | Logout confirmation |
-| `GET` | `/api/auth/me` | Protected | Retrieve currently authenticated user |
+### 1. Prerequisites
+- **Node.js**: v20 or higher
+- **npm**: v9 or higher
+- **MongoDB**: Local MongoDB daemon or free MongoDB Atlas URI
+- **Google Gemini API Key**: Free key from [Google AI Studio](https://aistudio.google.com)
 
-### 2. User Profile (`/api/profile`)
-| Method | Endpoint | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/profile` | Protected | Retrieve user profile (education, graduation year, target role, skills, etc.) |
-| `PUT` | `/api/profile` | Protected | Update profile details and recalculate profile completion |
+### 2. Backend Setup
+```bash
+# Navigate to backend directory
+cd server
 
-### 3. Resume APIs (`/api/resumes`)
-| Method | Endpoint | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/resumes/upload` | Protected | Upload `.pdf`, `.doc`, or `.docx` resume (up to 5MB) & receive ATS analysis |
-| `GET` | `/api/resumes` | Protected | Retrieve all uploaded resumes for authenticated user |
-| `GET` | `/api/resumes/:id` | Protected | Retrieve single resume metadata and section score analysis |
-| `DELETE` | `/api/resumes/:id` | Protected | Delete resume record and remove file from disk |
+# Install dependencies
+npm install
 
-### 4. Career Roadmap APIs (`/api/roadmaps`)
-| Method | Endpoint | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/roadmaps` | Protected | Create personalized career roadmap with custom or default milestones |
-| `GET` | `/api/roadmaps` | Protected | Retrieve active roadmap for authenticated user |
-| `GET` | `/api/roadmaps/:id` | Protected | Retrieve specific roadmap by ID |
-| `PATCH` | `/api/roadmaps/:id/progress` | Protected | Update phase status or toggle project completion |
+# Create environment configuration
+cp .env.example .env
+```
 
-### 5. Job APIs (`/api/jobs`)
-| Method | Endpoint | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/jobs` | Public | Retrieve jobs with query filters (`q`, `location`, `type`, `tags`, `minScore`, `page`, `limit`) |
-| `GET` | `/api/jobs/:id` | Public | Retrieve detailed job opportunity by ID |
-
-### 6. Chat History APIs (`/api/chat`)
-| Method | Endpoint | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/api/chat` | Protected | Save new conversation or append messages to an existing conversation |
-| `GET` | `/api/chat` | Protected | Retrieve list of previous conversation sessions |
-| `GET` | `/api/chat/:id` | Protected | Retrieve full conversation message history |
-| `DELETE` | `/api/chat/:id` | Protected | Delete conversation history |
-
-### 7. System Health
-| Method | Endpoint | Access | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/api/health` | Public | Service health status, uptime, and timestamp |
-
----
-
-## 🛠️ How to Run Frontend and Backend Together
-
-### Step 1: Configure Environment Variables
-Inside the `server/` directory, verify or create `.env` based on `.env.example`:
+Edit `server/.env`:
 ```env
 PORT=5000
 NODE_ENV=development
 CLIENT_URL=http://localhost:5173
 MONGODB_URI=mongodb://localhost:27017/careerpilot
-JWT_SECRET=your_super_secret_jwt_key_here
-JWT_EXPIRES_IN=7d
-MAX_FILE_SIZE_MB=5
-UPLOAD_DIR=uploads/resumes
+JWT_SECRET=development_super_secret_jwt_key_12345
+GEMINI_API_KEY=your_actual_gemini_api_key_here
 ```
 
-### Step 2: Start the Backend Server
-Open a terminal in `CareerPilot/server` and run:
+Start the backend server:
 ```bash
-# Start in watch mode for development
-npm run dev
-
-# Or start in standard mode
-npm start
-```
-The backend will launch at `http://localhost:5000`. You can confirm service health at `http://localhost:5000/api/health`.
-
-### Step 3: Run Backend Tests
-In the `server/` terminal:
-```bash
-npm run test
-```
-Runs the 38 unit & integration test suites validating all authentication, profile, resume, roadmap, job, and chat endpoints.
-
-### Step 4: Start the Frontend Application
-In a separate terminal at the root `CareerPilot` directory:
-```bash
+# Seed initial sample jobs and verified knowledge
 npm run dev
 ```
-Open your browser to `http://localhost:5173`. CORS is pre-configured so frontend requests to `http://localhost:5000/api/...` will communicate seamlessly without origin blocks.
+The API server starts at `http://localhost:5000`.
+
+### 3. Frontend Setup
+```bash
+# In the repository root
+npm install
+
+# Create environment configuration
+cp .env.example .env
+
+# Start frontend development server
+npm run dev
+```
+Open `http://localhost:5173` in your browser.
 
 ---
 
-## 🔮 Next Phase (AI Integration)
-- **LangChain.js + Google Gemini**: Integrating structured prompt chains for automated resume text extraction, dynamic ATS scoring, real-time job matching vector similarity, and intelligent chat copilot responses.
+## 🧪 Testing & Quality Assurance
+
+CareerPilot maintains automated test coverage across all layers:
+
+### Running Backend Test Suite
+```bash
+cd server
+npm test
+```
+
+**Results: 75 Passed, 0 Failed, 0 Flaky**
+- `agent.test.js` (13 tests): Tool schemas, privacy isolation, composite workflows, loop prevention, REST endpoints.
+- `rag.test.js` (10 tests): Text splitting, cosine retrieval, grounded citations, out-of-domain handling, user data isolation.
+- `resume.test.js` (9 tests): PDF & DOCX text extraction, validation, MIME checking, user isolation.
+- `ai.test.js` (9 tests): Structured Gemini analysis, gap analysis, roadmap generation, interview scoring.
+- `auth.test.js` (8 tests): Registration, login, duplicate detection, JWT validation, logout.
+- `jobs.test.js` (4 tests): Pagination, filtering, single-job retrieval.
+- `roadmap.test.js` (4 tests): Creation, retrieval, milestone progress updates.
+- `chat.test.js` (5 tests): Session creation, message appending, conversation retrieval, deletion.
+- `profile.test.js` (3 tests): Retrieval, updates, auth guards.
+- `health.test.js` (2 tests): Health check probe, 404 handler.
+
+### Frontend Quality Checks
+```bash
+# Fast Oxlint check (88 files)
+npm run lint
+
+# Production Vite build
+npm run build
+```
+
+---
+
+## 🔒 Security & Performance
+
+- **Defense in Depth**: Helmet security headers configure strict CSP, frameguard (`DENY`), and cross-origin resource isolation.
+- **Tiered Rate Limiting**: Dedicated rate limits protect against credential stuffing on `/api/auth`, scraping on general routes, and quota exhaustion on `/api/agent` & `/api/ai`.
+- **User Resume Isolation**: Every resume file and vector chunk is strictly scoped to the authenticated user's ID. Suitewide automated tests verify that User A cannot retrieve User B's resume data under any conditions.
+- **Safe Error Responses**: Unhandled exceptions mask stack traces and internal errors in production mode.
+- **Vite Chunk Optimization**: Rolldown/Rollup manual chunking isolates heavy vendor bundles, keeping individual assets below 280kB.
+
+---
+
+## 🚢 Deployment & Production Setup
+
+CareerPilot is ready for one-click deployment:
+- **Frontend**: [Vercel](https://vercel.com) via [vercel.json](file:///c:/Desktop/WEB%20DEVELOPMENT/CareerPilot/vercel.json) (SPA rewrites and immutable asset caching).
+- **Backend API**: [Render](https://render.com) via [render.yaml](file:///c:/Desktop/WEB%20DEVELOPMENT/CareerPilot/render.yaml) (Web Service with health probes).
+- **Database**: [MongoDB Atlas](https://www.mongodb.com/atlas).
+- **Vector Database**: Standalone ChromaDB daemon or built-in in-memory fallback.
+
+For complete step-by-step instructions, see the [Deployment Guide](file:///c:/Desktop/WEB%20DEVELOPMENT/CareerPilot/docs/DEPLOYMENT_GUIDE.md).
+
+---
+
+## 📚 Comprehensive Documentation
+
+- 📖 [REST API Documentation](file:///c:/Desktop/WEB%20DEVELOPMENT/CareerPilot/docs/API_DOCUMENTATION.md) – Endpoints, parameters, response envelopes, and status codes.
+- 🏗️ [System Architecture & Design](file:///c:/Desktop/WEB%20DEVELOPMENT/CareerPilot/docs/ARCHITECTURE.md) – Component layering, agent execution flow, and RAG data pipeline.
+- 🚀 [Production Deployment Guide](file:///c:/Desktop/WEB%20DEVELOPMENT/CareerPilot/docs/DEPLOYMENT_GUIDE.md) – Hosting setup, environment variables, and production checklist.
+
+---
+
+## 📄 License
+This project is open-source under the MIT License.

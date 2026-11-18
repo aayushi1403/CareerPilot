@@ -206,3 +206,26 @@ export async function ingestDocumentRagApi(payload) {
   const response = await apiClient.post('/rag/ingest', payload);
   return response.data;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Autonomous AI Career Agent (LangChain Tool Calling)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 9. Chat with the Tool-Enabled Autonomous Career Agent
+ * @param {Object} payload - { message: string, conversationId?: string }
+ */
+export async function queryAgentChatApi(payload) {
+  await ensureAuthToken();
+  const response = await apiClient.post('/agent/chat', payload);
+  return response.data;
+}
+
+/**
+ * 10. Retrieve the list of available Agent Tools
+ */
+export async function getAgentToolsApi() {
+  await ensureAuthToken();
+  const response = await apiClient.get('/agent/tools');
+  return response.data;
+}

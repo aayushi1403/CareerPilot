@@ -174,13 +174,17 @@ export const setupMockDb = () => {
     if (query?.type) {
       result = result.filter((j) => j.type === query.type);
     }
-    return {
-      sort: () => ({
-        skip: (s) => ({
-          limit: (l) => Promise.resolve(result.slice(s, s + l)),
-        }),
-      }),
+    const chainable = Promise.resolve(result);
+    chainable.sort = () => {
+      const sorted = Promise.resolve(result);
+      sorted.skip = (s) => {
+        const skipped = Promise.resolve(result.slice(s));
+        skipped.limit = (l) => Promise.resolve(result.slice(s, s + l));
+        return skipped;
+      };
+      return sorted;
     };
+    return chainable;
   };
 
   Job.findById = async (id) => {
