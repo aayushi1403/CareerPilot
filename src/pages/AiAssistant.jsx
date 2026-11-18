@@ -21,11 +21,11 @@ import {
   CheckCircle2,
   Cpu,
 } from 'lucide-react';
-import { userProfile } from '../data/mockData';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import DemoBanner from '../components/DemoBanner';
 import { queryAgentChatApi, getAgentToolsApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const initialSuggestedQuestions = [
   'I want to become a backend developer. Am I ready?',
@@ -36,11 +36,13 @@ const initialSuggestedQuestions = [
   'Give me 3 backend technical interview questions',
 ];
 
-const initialMessages = [
-  {
-    id: 1,
-    sender: 'assistant',
-    text: `Hello ${userProfile.name.split(' ')[0]}! 👋 I'm your **Autonomous AI Career Agent** powered by **LangChain.js & Google Gemini**.
+const buildInitialMessages = (userName) => {
+  const firstName = userName ? userName.split(' ')[0] : 'there';
+  return [
+    {
+      id: 1,
+      sender: 'assistant',
+      text: `Hello ${firstName}! 👋 I'm your **Autonomous AI Career Agent** powered by **LangChain.js & Google Gemini**.
 
 I have 6 specialized career tools at my disposal to analyze your profile, query verified industry benchmarks, and plan your career progression:
 
@@ -52,38 +54,40 @@ I have 6 specialized career tools at my disposal to analyze your profile, query 
 • **mock_interview_tool**: Generates tailored technical questions and evaluates candidate answers
 
 Try asking a complex multi-step question like **"I want to become a backend developer. Am I ready?"** or click any prompt below!`,
-    timestamp: 'Just now',
-    isGrounded: true,
-    confidence: 'high',
-    toolsUsed: [
-      {
-        tool: 'resume_analyzer',
-        summary: 'Connected to user profile and latest resume verification pipeline.',
-      },
-      {
-        tool: 'rag_retriever',
-        summary: 'Loaded 5 verified engineering competency frameworks from ChromaDB.',
-      },
-    ],
-    citations: [
-      {
-        title: 'Backend Engineering Career Track & Competency Guide',
-        source: 'verified-docs/backend-engineering.md',
-        docType: 'career_guide',
-        snippet: 'Production-ready Node.js, Express, and database indexing strategies.',
-      },
-      {
-        title: 'Technical & Behavioral Interview Mastery (STAR Framework)',
-        source: 'verified-docs/interview-mastery.md',
-        docType: 'interview_prep',
-        snippet: 'STAR behavioral response structuring with quantifiable results.',
-      },
-    ],
-  },
-];
+      timestamp: 'Just now',
+      isGrounded: true,
+      confidence: 'high',
+      toolsUsed: [
+        {
+          tool: 'resume_analyzer',
+          summary: 'Connected to user profile and latest resume verification pipeline.',
+        },
+        {
+          tool: 'rag_retriever',
+          summary: 'Loaded 5 verified engineering competency frameworks from ChromaDB.',
+        },
+      ],
+      citations: [
+        {
+          title: 'Backend Engineering Career Track & Competency Guide',
+          source: 'verified-docs/backend-engineering.md',
+          docType: 'career_guide',
+          snippet: 'Production-ready Node.js, Express, and database indexing strategies.',
+        },
+        {
+          title: 'Technical & Behavioral Interview Mastery (STAR Framework)',
+          source: 'verified-docs/interview-mastery.md',
+          docType: 'interview_prep',
+          snippet: 'STAR behavioral response structuring with quantifiable results.',
+        },
+      ],
+    },
+  ];
+};
 
 export default function AiAssistant() {
-  const [messages, setMessages] = useState(initialMessages);
+  const { user } = useAuth();
+  const [messages, setMessages] = useState(() => buildInitialMessages(user?.name));
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
@@ -94,6 +98,17 @@ export default function AiAssistant() {
   const [availableTools, setAvailableTools] = useState([]);
 
   const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    if (user?.name) {
+      setMessages((prev) => {
+        if (prev.length === 1 && prev[0].id === 1) {
+          return buildInitialMessages(user.name);
+        }
+        return prev;
+      });
+    }
+  }, [user?.name]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

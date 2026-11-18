@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { verifyToken } from '../utils/jwt.js';
 import User from '../models/User.js';
 import { errorResponse } from '../utils/apiResponse.js';
+import { devStore } from '../utils/devStore.js';
 
 const isDbAvailable = () => mongoose.connection.readyState === 1 || process.env.NODE_ENV === 'test';
 
@@ -25,18 +26,11 @@ export const protect = async (req, res, next) => {
     let user;
     if (isDbAvailable()) {
       user = await User.findById(decoded.id).select('-password');
-    } else if (process.env.NODE_ENV !== 'production') {
-      // In-memory development demo session
-      user = {
-        _id: decoded.id || '673c11111111111111111111',
-        name: decoded.name || 'Alex Mercer',
-        email: decoded.email || 'alex.mercer@careerpilot.io',
-        targetJobRole: 'Full-Stack Developer',
-        skills: ['React', 'JavaScript', 'Node.js', 'Git'],
-        role: 'user',
-      };
     } else {
-      user = await User.findById(decoded.id).select('-password');
+      user = devStore.findUserById(decoded.id);
+      if (!user && decoded.email) {
+        user = devStore.findUserByEmail(decoded.email);
+      }
     }
 
     if (!user) {

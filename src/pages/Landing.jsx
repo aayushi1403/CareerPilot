@@ -28,13 +28,13 @@ function Navbar() {
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-4">
             <Link
-              to="/dashboard"
+              to="/login"
               className="text-sm text-slate-300 hover:text-slate-100 transition-colors"
             >
               Sign In
             </Link>
             <Link
-              to="/dashboard"
+              to="/register"
               className="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all"
             >
               Get Started Free
@@ -59,7 +59,14 @@ function Navbar() {
           <a href="#how-it-works" onClick={() => setMenuOpen(false)} className="text-slate-300 hover:text-slate-100 text-sm transition-colors">How it Works</a>
           <a href="#pricing" onClick={() => setMenuOpen(false)} className="text-slate-300 hover:text-slate-100 text-sm transition-colors">Pricing</a>
           <Link
-            to="/dashboard"
+            to="/login"
+            onClick={() => setMenuOpen(false)}
+            className="text-slate-300 hover:text-slate-100 text-sm text-center py-2 transition-colors"
+          >
+            Sign In
+          </Link>
+          <Link
+            to="/register"
             onClick={() => setMenuOpen(false)}
             className="bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 rounded-lg text-sm font-medium text-center transition-all"
           >
@@ -102,7 +109,7 @@ function Hero() {
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-14">
           <Link
-            to="/dashboard"
+            to="/register"
             className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-8 py-3.5 rounded-xl font-semibold text-base transition-all shadow-lg shadow-violet-900/40"
           >
             Start for Free <ArrowRight size={18} />
@@ -373,7 +380,7 @@ function CTASection() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Link
-                to="/dashboard"
+                to="/register"
                 className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-8 py-3.5 rounded-xl font-semibold text-base transition-all shadow-lg shadow-violet-900/40"
               >
                 Start for Free <ArrowRight size={18} />

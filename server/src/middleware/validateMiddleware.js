@@ -24,6 +24,10 @@ export const validateRegister = (req, res, next) => {
     errors.push('Password must be at least 6 characters long');
   }
 
+  if (req.body.confirmPassword !== undefined && req.body.confirmPassword !== password) {
+    errors.push('Passwords do not match');
+  }
+
   if (errors.length > 0) {
     return errorResponse(res, 400, 'Validation failed', errors);
   }

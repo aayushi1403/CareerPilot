@@ -10,6 +10,7 @@ import {
   createEmptyStructuredData,
 } from '../services/resumeParserService.js';
 import { indexUserResume } from '../services/rag/ragAssistantService.js';
+import { devStore } from '../utils/devStore.js';
 
 const isDbAvailable = () => mongoose.connection.readyState === 1 || process.env.NODE_ENV === 'test';
 
@@ -39,10 +40,7 @@ export const uploadResumeDocument = async (req, res, next) => {
     let status = 'uploaded';
 
     if (extractionStatus === 'completed') {
-      // Parse sections, contact, skills, education, experience, projects
       structuredData = parseResumeText(rawText);
-
-      // Calculate ATS metrics and section scores
       const metrics = calculateResumeMetrics(rawText, structuredData);
       calculatedAtsScore = metrics.atsScore;
       calculatedOverallScore = metrics.overallScore;
@@ -50,7 +48,7 @@ export const uploadResumeDocument = async (req, res, next) => {
       keywords = metrics.keywords;
       status = 'analyzed';
 
-      // Update user's cached resumeScore and skills if database is available
+      // Update user's cached resumeScore and skills if available
       if (isDbAvailable()) {
         try {
           const updatePayload = { resumeScore: calculatedAtsScore };
@@ -64,6 +62,8 @@ export const uploadResumeDocument = async (req, res, next) => {
         } catch (userUpdateErr) {
           console.warn(`[User Profile Update Warning]: ${userUpdateErr.message}`);
         }
+      } else {
+        devStore.updateUser(req.user._id, { resumeScore: calculatedAtsScore });
       }
     } else if (extractionStatus === 'scanned_or_empty') {
       calculatedAtsScore = 40;
@@ -81,13 +81,12 @@ export const uploadResumeDocument = async (req, res, next) => {
         },
       ];
     } else {
-      // Extraction failed
       calculatedAtsScore = 30;
       calculatedOverallScore = 35;
       status = 'uploaded';
     }
 
-    // 3. Save resume metadata and structured data in MongoDB or in-memory fallback
+    // 3. Save resume metadata and structured data
     let savedResume;
 
     if (isDbAvailable()) {
@@ -113,7 +112,6 @@ export const uploadResumeDocument = async (req, res, next) => {
       await newResume.save();
       savedResume = newResume;
 
-      // Asynchronously index resume chunks into vector store for RAG
       if (extractionStatus === 'completed' && rawText) {
         try {
           await indexUserResume(newResume);
@@ -122,9 +120,7 @@ export const uploadResumeDocument = async (req, res, next) => {
         }
       }
     } else {
-      // Graceful offline fallback in development mode
-      savedResume = {
-        _id: '673c22222222222222222222',
+      savedResume = devStore.saveResume({
         userId: req.user._id,
         fileName: filename,
         originalName: originalname,
@@ -141,8 +137,7 @@ export const uploadResumeDocument = async (req, res, next) => {
         status,
         sections,
         keywords,
-        createdAt: new Date(),
-      };
+      });
     }
 
     const responseMessage =
@@ -167,14 +162,12 @@ export const uploadResumeDocument = async (req, res, next) => {
  */
 export const getUploadedResumes = async (req, res, next) => {
   try {
-    if (!isDbAvailable()) {
-      return successResponse(res, 200, 'Resumes retrieved successfully', {
-        count: 0,
-        resumes: [],
-      });
+    let resumes;
+    if (isDbAvailable()) {
+      resumes = await Resume.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    } else {
+      resumes = devStore.findResumesByUserId(req.user._id);
     }
-
-    const resumes = await Resume.find({ userId: req.user._id }).sort({ createdAt: -1 });
 
     return successResponse(res, 200, 'Resumes retrieved successfully', {
       count: resumes.length,
@@ -192,14 +185,15 @@ export const getUploadedResumes = async (req, res, next) => {
  */
 export const getResumeById = async (req, res, next) => {
   try {
-    if (!isDbAvailable()) {
-      return errorResponse(res, 404, 'Resume not found.');
+    let resume;
+    if (isDbAvailable()) {
+      resume = await Resume.findOne({
+        _id: req.params.id,
+        userId: req.user._id,
+      });
+    } else {
+      resume = devStore.findResumeByIdAndUserId(req.params.id, req.user._id);
     }
-
-    const resume = await Resume.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
 
     if (!resume) {
       return errorResponse(res, 404, 'Resume not found or you are not authorized to access it.');
@@ -220,29 +214,33 @@ export const getResumeById = async (req, res, next) => {
  */
 export const deleteResume = async (req, res, next) => {
   try {
-    if (!isDbAvailable()) {
-      return successResponse(res, 200, 'Resume removed successfully');
-    }
+    let resume;
+    if (isDbAvailable()) {
+      resume = await Resume.findOne({
+        _id: req.params.id,
+        userId: req.user._id,
+      });
 
-    const resume = await Resume.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
-
-    if (!resume) {
-      return errorResponse(res, 404, 'Resume not found or you are not authorized to delete it.');
-    }
-
-    // Remove file from disk
-    if (resume.filePath && fs.existsSync(resume.filePath)) {
-      try {
-        fs.unlinkSync(resume.filePath);
-      } catch (fsErr) {
-        console.warn(`[File Delete Warning]: Could not unlink ${resume.filePath}: ${fsErr.message}`);
+      if (!resume) {
+        return errorResponse(res, 404, 'Resume not found or you are not authorized to delete it.');
       }
-    }
 
-    await Resume.deleteOne({ _id: resume._id });
+      if (resume.filePath && fs.existsSync(resume.filePath)) {
+        try {
+          fs.unlinkSync(resume.filePath);
+        } catch (fsErr) {
+          console.warn(`[File Delete Warning]: Could not unlink ${resume.filePath}: ${fsErr.message}`);
+        }
+      }
+
+      await Resume.deleteOne({ _id: resume._id });
+    } else {
+      resume = devStore.findResumeByIdAndUserId(req.params.id, req.user._id);
+      if (!resume) {
+        return errorResponse(res, 404, 'Resume not found or you are not authorized to delete it.');
+      }
+      devStore.deleteResume(req.params.id, req.user._id);
+    }
 
     return successResponse(res, 200, 'Resume deleted successfully', {
       id: req.params.id,

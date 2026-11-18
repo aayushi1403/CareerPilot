@@ -1,17 +1,21 @@
 import React, { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { User, Settings, LogOut, ChevronRight } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const getInitials = (name = '') =>
   name
     .split(' ')
+    .filter(Boolean)
     .map((w) => w[0])
     .slice(0, 2)
     .join('')
-    .toUpperCase();
+    .toUpperCase() || 'CP';
 
 const ProfileDropdown = ({ user, onClose }) => {
   const panelRef = useRef(null);
+  const { logout } = useAuth();
+  const navigate = useNavigate();
 
   // Close on outside click
   useEffect(() => {
@@ -24,14 +28,16 @@ const ProfileDropdown = ({ user, onClose }) => {
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  const handleSignOut = () => {
-    alert('Authentication coming in next phase');
+  const handleSignOut = async () => {
+    onClose?.();
+    await logout();
+    navigate('/login', { replace: true });
   };
 
   return (
     <div
       ref={panelRef}
-      className="absolute right-0 top-full mt-2 w-64 bg-[#0f1f3d] border border-slate-700 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden"
+      className="absolute right-0 top-full mt-2 w-64 bg-[#0f1f3d] border border-slate-700 rounded-xl shadow-2xl shadow-black/50 z-50 overflow-hidden animate-fade-in-up"
     >
       {/* Avatar + Info */}
       <div className="flex items-center gap-3 px-4 py-4 border-b border-slate-700/60">
@@ -40,13 +46,13 @@ const ProfileDropdown = ({ user, onClose }) => {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-100 truncate">
-            {user?.name ?? 'Demo User'}
+            {user?.name || 'User Profile'}
           </p>
           <p className="text-xs text-slate-400 truncate">
-            {user?.email ?? 'demo@example.com'}
+            {user?.email || 'Authenticated'}
           </p>
           <p className="text-xs text-violet-400 truncate">
-            {user?.title ?? 'Developer'}
+            {user?.targetJobRole || user?.title || 'Job Seeker'}
           </p>
         </div>
       </div>
@@ -63,12 +69,15 @@ const ProfileDropdown = ({ user, onClose }) => {
           <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
         </Link>
 
-        {/* Settings — placeholder */}
-        <div className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-slate-100 hover:bg-slate-700/40 transition-colors cursor-pointer group">
+        <Link
+          to="/profile"
+          onClick={onClose}
+          className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:text-slate-100 hover:bg-slate-700/40 transition-colors group"
+        >
           <Settings className="w-4 h-4 text-slate-400 group-hover:text-violet-400 transition-colors" />
-          <span>Settings</span>
+          <span>Edit Preferences</span>
           <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-600 group-hover:text-slate-400 transition-colors" />
-        </div>
+        </Link>
       </div>
 
       {/* Divider */}

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Menu, Bell, Search } from 'lucide-react';
-import { notifications, userProfile } from '../data/mockData';
+import { notifications } from '../data/mockData';
 import Notification from '../components/Notification';
 import ProfileDropdown from '../components/ProfileDropdown';
+import { useAuth } from '../context/AuthContext';
 
 const routeTitles = {
   '/dashboard': 'Dashboard',
@@ -18,6 +19,7 @@ const routeTitles = {
 
 export default function TopNav({ onMenuToggle }) {
   const location = useLocation();
+  const { user } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
@@ -25,8 +27,15 @@ export default function TopNav({ onMenuToggle }) {
   const profileRef = useRef(null);
 
   const pageTitle = routeTitles[location.pathname] ?? 'CareerPilot';
-
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const initials = (user?.name || 'CP')
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -103,15 +112,15 @@ export default function TopNav({ onMenuToggle }) {
               setShowNotifications(false);
             }}
             aria-label="User profile"
-            className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white hover:bg-violet-500 transition-colors select-none"
+            className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white hover:bg-violet-500 transition-colors select-none ring-2 ring-violet-500/30"
           >
-            JS
+            {initials}
           </button>
 
           {showProfile && (
             <div className="absolute right-0 top-full mt-2 z-50">
               <ProfileDropdown
-                user={userProfile}
+                user={user}
                 onClose={() => setShowProfile(false)}
               />
             </div>

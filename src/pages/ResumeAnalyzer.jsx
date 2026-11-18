@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload,
   FileText,
@@ -22,6 +22,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Sparkles,
+  Trash2,
+  History,
+  Plus,
 } from 'lucide-react';
 import { resumeAnalysis as demoData } from '../data/mockData';
 import Card from '../components/Card';
@@ -29,7 +32,8 @@ import Button from '../components/Button';
 import Badge from '../components/Badge';
 import ProgressBar from '../components/ProgressBar';
 import DemoBanner from '../components/DemoBanner';
-import { uploadResumeApi, analyzeResumeAiApi } from '../services/api';
+import { uploadResumeApi, getResumesApi, deleteResumeApi, analyzeResumeAiApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 // ── Score Ring ───────────────────────────────────────────────
 const ScoreRing = ({ score }) => (
@@ -56,15 +60,20 @@ const ScoreRing = ({ score }) => (
 
 // ── Main Page ────────────────────────────────────────────────
 const ResumeAnalyzer = () => {
-  const [analyzed, setAnalyzed] = useState(true);
-  const [isDemo, setIsDemo] = useState(true);
+  const { refreshUser } = useAuth();
+  const [analyzed, setAnalyzed] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState('');
   const [uploadError, setUploadError] = useState(null);
-  const [activeFileName, setActiveFileName] = useState('demo_resume.pdf');
-  const [activeFileSize, setActiveFileSize] = useState('240 KB');
+  const [activeFileName, setActiveFileName] = useState('');
+  const [activeFileSize, setActiveFileSize] = useState('');
+
+  // User uploaded resumes history
+  const [userResumes, setUserResumes] = useState([]);
+  const [selectedResumeId, setSelectedResumeId] = useState(null);
 
   // AI Deep Audit state (LangChain + Gemini)
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -73,61 +82,80 @@ const ResumeAnalyzer = () => {
 
   // Parsed Resume state from backend
   const [parsedData, setParsedData] = useState({
-    overallScore: demoData.overallScore,
-    atsScore: demoData.atsScore,
-    sections: demoData.sections,
-    keywords: demoData.keywords,
+    overallScore: 0,
+    atsScore: 0,
+    sections: [],
+    keywords: { found: [], missing: [] },
     extractionStatus: 'completed',
     extractionError: null,
-    metadata: { wordCount: 420, characterCount: 2850, pageCount: 1 },
-    structuredData: {
-      contact: {
-        name: 'Alex Mercer',
-        email: 'alex.mercer@example.dev',
-        phone: '+1 (555) 234-5678',
-        location: 'San Francisco, CA',
-        linkedin: 'linkedin.com/in/alexmercer',
-        github: 'github.com/alexmercer',
-      },
-      education: [
-        {
-          degree: 'B.S. in Computer Science',
-          institution: 'University of California, Berkeley',
-          year: '2019 - 2023',
-          gpa: '3.8 / 4.0',
-        },
-      ],
-      skills: [
-        'React', 'JavaScript', 'TypeScript', 'Node.js', 'Express',
-        'Next.js', 'PostgreSQL', 'MongoDB', 'Docker', 'AWS', 'Git', 'Tailwind CSS',
-      ],
-      workExperience: [
-        {
-          role: 'Full-Stack Developer',
-          company: 'TechNova Solutions',
-          duration: 'Jun 2023 - Present',
-          highlights: [
-            'Engineered high-performance microservices reducing API latency by 35%.',
-            'Architected client portals with React and Vite serving 150,000+ active users.',
-          ],
-        },
-      ],
-      projects: [
-        {
-          title: 'CareerPilot AI Copilot',
-          description: 'Full-stack AI career assistant with automated resume parsing and ATS scoring.',
-          techStack: ['React', 'Node.js', 'MongoDB', 'Tailwind CSS'],
-        },
-      ],
-      certifications: ['AWS Certified Solutions Architect (Associate)'],
-      achievements: ['1st Place Hackathon Winner - UC Berkeley 2022'],
-    },
+    metadata: { wordCount: 0, characterCount: 0, pageCount: 1 },
+    structuredData: {},
   });
 
   const fileInputRef = useRef(null);
 
+  const applyResume = (resumeDoc) => {
+    setSelectedResumeId(resumeDoc._id);
+    setActiveFileName(resumeDoc.originalName || resumeDoc.fileName);
+    setActiveFileSize(`${Math.round(resumeDoc.fileSize / 1024)} KB`);
+    setParsedData({
+      rawText: resumeDoc.rawText || '',
+      overallScore: resumeDoc.overallScore || 75,
+      atsScore: resumeDoc.atsScore || 70,
+      sections: resumeDoc.sections || [],
+      keywords: resumeDoc.keywords || { found: [], missing: [] },
+      extractionStatus: resumeDoc.extractionStatus || 'completed',
+      extractionError: resumeDoc.extractionError || null,
+      metadata: resumeDoc.metadata || { wordCount: 0, characterCount: 0, pageCount: 1 },
+      structuredData: resumeDoc.structuredData || {},
+    });
+    setAnalyzed(true);
+    setIsDemo(false);
+    setAiAnalysis(null);
+  };
+
+  const fetchResumes = async () => {
+    try {
+      const res = await getResumesApi();
+      if (Array.isArray(res?.data?.resumes)) {
+        setUserResumes(res.data.resumes);
+        if (res.data.resumes.length > 0) {
+          applyResume(res.data.resumes[0]);
+        } else {
+          setAnalyzed(false);
+          setIsDemo(false);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not load user resumes:', err.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchResumes();
+  }, []);
+
+  const handleDeleteResume = async (resumeId) => {
+    if (!window.confirm('Are you sure you want to delete this uploaded resume?')) return;
+    try {
+      await deleteResumeApi(resumeId);
+      const updated = userResumes.filter((r) => r._id !== resumeId);
+      setUserResumes(updated);
+      if (updated.length > 0) {
+        applyResume(updated[0]);
+      } else {
+        setAnalyzed(false);
+        setSelectedResumeId(null);
+      }
+      refreshUser?.();
+    } catch (err) {
+      setUploadError(err.response?.data?.message || err.message || 'Failed to delete resume.');
+    }
+  };
+
   const handleAnalyzeAnother = () => {
     setAnalyzed(false);
+    setIsDemo(false);
     setUploadProgress(0);
     setUploadError(null);
     setAiAnalysis(null);
@@ -202,18 +230,9 @@ const ResumeAnalyzer = () => {
       setTimeout(() => {
         if (response?.data?.resume) {
           const resDoc = response.data.resume;
-          setParsedData({
-            rawText: resDoc.rawText || '',
-            overallScore: resDoc.overallScore || 75,
-            atsScore: resDoc.atsScore || 70,
-            sections: resDoc.sections || [],
-            keywords: resDoc.keywords || { found: [], missing: [] },
-            extractionStatus: resDoc.extractionStatus || 'completed',
-            extractionError: resDoc.extractionError || null,
-            metadata: resDoc.metadata || { wordCount: 0, characterCount: 0, pageCount: 1 },
-            structuredData: resDoc.structuredData || {},
-          });
-          setIsDemo(false);
+          applyResume(resDoc);
+          fetchResumes();
+          refreshUser?.();
         }
 
         setUploadProgress(100);
@@ -393,6 +412,97 @@ const ResumeAnalyzer = () => {
         </div>
       )}
 
+      {/* ── My Uploaded Resumes Drawer ───────────────────────── */}
+      {userResumes.length > 0 && (
+        <Card padding="md" className="border-slate-700/60 bg-[#081226]/80">
+          <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-700/40">
+            <div className="flex items-center gap-2">
+              <History size={18} className="text-violet-400" />
+              <h2 className="text-sm font-semibold text-slate-100">
+                My Uploaded Resumes <span className="text-xs text-slate-400 font-normal">({userResumes.length})</span>
+              </h2>
+            </div>
+            <Button
+              variant={analyzed ? 'secondary' : 'primary'}
+              size="sm"
+              onClick={handleAnalyzeAnother}
+            >
+              <Plus size={14} className="mr-1.5" /> Upload New Resume
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-3">
+            {userResumes.map((resume) => {
+              const isSelected = selectedResumeId === resume._id && analyzed && !isDemo;
+              const formattedDate = resume.createdAt ? new Date(resume.createdAt).toLocaleDateString() : 'Recent';
+              const kb = resume.fileSize ? `${Math.round(resume.fileSize / 1024)} KB` : '';
+
+              return (
+                <div
+                  key={resume._id}
+                  onClick={() => applyResume(resume)}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                    isSelected
+                      ? 'bg-violet-500/10 border-violet-500/60 shadow-lg shadow-violet-500/10'
+                      : 'bg-slate-900/40 border-slate-700/50 hover:border-violet-500/40 hover:bg-slate-800/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div
+                        className={`p-1.5 rounded-lg flex-shrink-0 ${
+                          isSelected ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        <FileText size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <p
+                          className="text-xs font-semibold text-slate-200 truncate"
+                          title={resume.originalName || resume.fileName}
+                        >
+                          {resume.originalName || resume.fileName}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {formattedDate} {kb ? `• ${kb}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Badge variant="violet" size="sm">Active</Badge>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 mt-1">
+                    <div className="text-[11px] text-slate-400">
+                      ATS: <span className="font-semibold text-cyan-400">{resume.atsScore || 75}/100</span>
+                    </div>
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {!isSelected && (
+                        <button
+                          onClick={() => applyResume(resume)}
+                          className="px-2 py-0.5 rounded text-[11px] font-medium text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 transition-colors"
+                        >
+                          View Report
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteResume(resume._id)}
+                        className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Delete resume"
+                        aria-label="Delete resume"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* ── Upload Section ───────────────────────────────────── */}
       {!analyzed ? (
         <Card padding="none">
@@ -482,7 +592,7 @@ const ResumeAnalyzer = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -493,6 +603,17 @@ const ResumeAnalyzer = () => {
                 <Button variant="secondary" size="sm" onClick={handleAnalyzeAnother}>
                   <Upload size={14} className="mr-1.5" /> Upload Another
                 </Button>
+                {!isDemo && selectedResumeId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteResume(selectedResumeId)}
+                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                    title="Delete this resume"
+                  >
+                    <Trash2 size={14} className="mr-1.5" /> Delete
+                  </Button>
+                )}
                 {!isDemo && (
                   <Button variant="ghost" size="sm" onClick={loadDemoResume} title="Switch to Demo">
                     <RefreshCw size={14} />

@@ -230,4 +230,87 @@ startxref
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.success, true);
   });
+
+  await t.test('MULTI-USER ISOLATION: User B cannot access or delete User A\'s resumes', async () => {
+    // 1. Register User A and User B
+    const userARes = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Alice Adams',
+        email: 'alice.isolation@test.com',
+        password: 'Password123!',
+      });
+    const tokenA = userARes.body.data.token;
+
+    const userBRes = await request(app)
+      .post('/api/auth/register')
+      .send({
+        name: 'Bob Brown',
+        email: 'bob.isolation@test.com',
+        password: 'Password123!',
+      });
+    const tokenB = userBRes.body.data.token;
+
+    // 2. User A uploads Resume A
+    const resumeABuffer = createValidPdfBuffer();
+    const uploadARes = await request(app)
+      .post('/api/resumes/upload')
+      .set('Authorization', `Bearer ${tokenA}`)
+      .attach('resume', resumeABuffer, 'alice_resume.pdf');
+
+    assert.strictEqual(uploadARes.status, 201);
+    const resumeAId = String(uploadARes.body.data.resume._id);
+
+    // 3. User B uploads Resume B
+    const resumeBBuffer = createValidPdfBuffer();
+    const uploadBRes = await request(app)
+      .post('/api/resumes/upload')
+      .set('Authorization', `Bearer ${tokenB}`)
+      .attach('resume', resumeBBuffer, 'bob_resume.pdf');
+
+    assert.strictEqual(uploadBRes.status, 201);
+    const resumeBId = String(uploadBRes.body.data.resume._id);
+
+    // 4. Verify User A only sees Resume A
+    const userAListRes = await request(app)
+      .get('/api/resumes')
+      .set('Authorization', `Bearer ${tokenA}`);
+    assert.strictEqual(userAListRes.status, 200);
+    const userAResumeIds = userAListRes.body.data.resumes.map((r) => String(r._id));
+    assert.ok(userAResumeIds.includes(resumeAId), 'User A list must include Resume A');
+    assert.ok(!userAResumeIds.includes(resumeBId), 'User A list must NOT include Resume B');
+
+    // 5. Verify User B only sees Resume B
+    const userBListRes = await request(app)
+      .get('/api/resumes')
+      .set('Authorization', `Bearer ${tokenB}`);
+    assert.strictEqual(userBListRes.status, 200);
+    const userBResumeIds = userBListRes.body.data.resumes.map((r) => String(r._id));
+    assert.ok(userBResumeIds.includes(resumeBId), 'User B list must include Resume B');
+    assert.ok(!userBResumeIds.includes(resumeAId), 'User B list must NOT include Resume A');
+
+    // 6. User B cannot view User A's resume
+    const userBViewARes = await request(app)
+      .get(`/api/resumes/${resumeAId}`)
+      .set('Authorization', `Bearer ${tokenB}`);
+    assert.strictEqual(userBViewARes.status, 404, 'User B must get 404 when querying User A resume');
+
+    // 7. User B cannot delete User A's resume
+    const userBDeleteARes = await request(app)
+      .delete(`/api/resumes/${resumeAId}`)
+      .set('Authorization', `Bearer ${tokenB}`);
+    assert.strictEqual(userBDeleteARes.status, 404, 'User B must get 404 when trying to delete User A resume');
+
+    // 8. User A can still view their own resume
+    const userAViewARes = await request(app)
+      .get(`/api/resumes/${resumeAId}`)
+      .set('Authorization', `Bearer ${tokenA}`);
+    assert.strictEqual(userAViewARes.status, 200);
+
+    // 9. User A can delete their own resume
+    const userADeleteARes = await request(app)
+      .delete(`/api/resumes/${resumeAId}`)
+      .set('Authorization', `Bearer ${tokenA}`);
+    assert.strictEqual(userADeleteARes.status, 200);
+  });
 });

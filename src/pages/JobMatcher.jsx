@@ -17,12 +17,13 @@ import {
   Compass,
   TrendingUp,
 } from 'lucide-react';
-import { jobListings, userProfile } from '../data/mockData';
+import { jobListings } from '../data/mockData';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import Badge from '../components/Badge';
 import DemoBanner from '../components/DemoBanner';
 import { getCareerRecommendationsAiApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 // ── Match badge color ─────────────────────────────────────────
 const matchVariant = (score) => {
@@ -113,6 +114,7 @@ const JobCard = ({ job, saved, onToggleSave, onSelect }) => {
 
 // ── Main Page ─────────────────────────────────────────────────
 const JobMatcher = () => {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
   const [typeFilter, setTypeFilter] = useState('All');
@@ -120,10 +122,16 @@ const JobMatcher = () => {
   const [savedJobs, setSavedJobs] = useState(new Set());
   const [selectedJob, setSelectedJob] = useState(null);
   const [showApplyModal, setShowApplyModal] = useState(false);
-  const [applicantName, setApplicantName] = useState(userProfile.name);
-  const [applicantEmail, setApplicantEmail] = useState(userProfile.email);
+  const [applicantName, setApplicantName] = useState(user?.name || '');
+  const [applicantEmail, setApplicantEmail] = useState(user?.email || '');
   const [applySuccess, setApplySuccess] = useState(false);
   const [applyError, setApplyError] = useState('');
+
+  // Sync user details if loaded asynchronously
+  React.useEffect(() => {
+    if (user?.name && !applicantName) setApplicantName(user.name);
+    if (user?.email && !applicantEmail) setApplicantEmail(user.email);
+  }, [user, applicantName, applicantEmail]);
 
   // Derive unique filter options
   const locations = useMemo(
@@ -174,8 +182,8 @@ const JobMatcher = () => {
     setShowAiCareerPanel(true);
     try {
       const res = await getCareerRecommendationsAiApi({
-        skills: userProfile.skills,
-        targetRole: userProfile.targetRole,
+        skills: user?.skills && user.skills.length > 0 ? user.skills : ['React', 'Node.js', 'JavaScript'],
+        targetRole: user?.targetJobRole || 'Full-Stack Developer',
       });
       if (res?.data?.recommendations) {
         setAiCareerData({
@@ -538,7 +546,8 @@ const JobMatcher = () => {
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {selectedJob.tags.map((tag) => {
-                    const isMatched = userProfile.skills.some((s) => s.toLowerCase() === tag.toLowerCase());
+                    const userSkills = user?.skills || ['React', 'Node.js', 'JavaScript', 'TypeScript'];
+                    const isMatched = userSkills.some((s) => s.toLowerCase() === tag.toLowerCase());
                     return (
                       <span
                         key={tag}

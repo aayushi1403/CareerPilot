@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { generateToken } from '../utils/jwt.js';
 import { successResponse, errorResponse } from '../utils/apiResponse.js';
+import { devStore } from '../utils/devStore.js';
 
 const isDbAvailable = () => mongoose.connection.readyState === 1 || process.env.NODE_ENV === 'test';
 
@@ -13,39 +15,48 @@ const isDbAvailable = () => mongoose.connection.readyState === 1 || process.env.
 export const register = async (req, res, next) => {
   try {
     const { name, email, password, targetJobRole, skills, experienceLevel } = req.body;
+    const normalizedEmail = (email || '').toLowerCase().trim();
 
-    // Graceful offline fallback in development mode if MongoDB is not connected
+    // Development offline mode with strict user creation & bcrypt hashing
     if (!isDbAvailable()) {
-      if (process.env.NODE_ENV === 'production') {
-        return errorResponse(res, 503, 'Database service currently unavailable. Please verify MONGODB_URI.');
+      const existingUser = devStore.findUserByEmail(normalizedEmail);
+      if (existingUser) {
+        return errorResponse(res, 409, 'An account with this email address already exists.');
       }
-      const devUser = {
-        _id: '673c11111111111111111111',
-        name: name || 'Alex Mercer',
-        email: email || 'alex.mercer@careerpilot.io',
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      const newUser = devStore.saveUser({
+        name: name.trim(),
+        email: normalizedEmail,
+        password: hashedPassword,
         targetJobRole: targetJobRole || 'Full-Stack Developer',
         skills: Array.isArray(skills) ? skills : ['React', 'JavaScript', 'Node.js', 'Git'],
         experienceLevel: experienceLevel || 'Mid-level',
-        profileCompletion: 85,
-        role: 'user',
-      };
-      const token = generateToken({ id: devUser._id, email: devUser.email, isDevMock: true });
-      return successResponse(res, 201, 'User registered successfully (development demo mode)', {
-        user: devUser,
+        profileCompletion: 60,
+      });
+
+      const token = generateToken({ id: newUser._id, email: newUser.email });
+      const userObj = { ...newUser };
+      delete userObj.password;
+
+      return successResponse(res, 201, 'User registered successfully', {
+        user: userObj,
         token,
       });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Normal MongoDB flow
+    const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
       return errorResponse(res, 409, 'An account with this email address already exists.');
     }
 
     // Create user
     const user = new User({
-      name,
-      email,
+      name: name.trim(),
+      email: normalizedEmail,
       password,
       targetJobRole: targetJobRole || 'Full-Stack Developer',
       skills: Array.isArray(skills) ? skills : ['React', 'JavaScript', 'Node.js', 'Git'],
@@ -78,30 +89,32 @@ export const register = async (req, res, next) => {
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = (email || '').toLowerCase().trim();
 
-    // Graceful offline fallback in development mode if MongoDB is not connected
+    // Development offline mode with real bcrypt credential check
     if (!isDbAvailable()) {
-      if (process.env.NODE_ENV === 'production') {
-        return errorResponse(res, 503, 'Database service currently unavailable. Please verify MONGODB_URI.');
+      const user = devStore.findUserByEmail(normalizedEmail);
+      if (!user) {
+        return errorResponse(res, 401, 'Invalid email or password.');
       }
-      const devUser = {
-        _id: '673c11111111111111111111',
-        name: 'Alex Mercer',
-        email: email || 'alex.mercer@careerpilot.io',
-        targetJobRole: 'Full-Stack Developer',
-        skills: ['React', 'JavaScript', 'Node.js', 'Git'],
-        profileCompletion: 85,
-        role: 'user',
-      };
-      const token = generateToken({ id: devUser._id, email: devUser.email, isDevMock: true });
-      return successResponse(res, 200, 'Login successful (development demo mode)', {
-        user: devUser,
+
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (!isMatch) {
+        return errorResponse(res, 401, 'Invalid email or password.');
+      }
+
+      const token = generateToken({ id: user._id, email: user.email });
+      const userObj = { ...user };
+      delete userObj.password;
+
+      return successResponse(res, 200, 'Login successful', {
+        user: userObj,
         token,
       });
     }
 
-    // Find user by email including password field
-    const user = await User.findOne({ email }).select('+password');
+    // Normal MongoDB flow
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user) {
       return errorResponse(res, 401, 'Invalid email or password.');
     }
@@ -135,8 +148,11 @@ export const login = async (req, res, next) => {
 export const getMe = async (req, res, next) => {
   try {
     if (!isDbAvailable()) {
-      return successResponse(res, 200, 'Current user retrieved (development demo mode)', {
-        user: req.user,
+      const user = devStore.findUserById(req.user._id) || req.user;
+      const userObj = { ...user };
+      delete userObj.password;
+      return successResponse(res, 200, 'Current user retrieved', {
+        user: userObj,
       });
     }
 
