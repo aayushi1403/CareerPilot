@@ -88,10 +88,21 @@ export const setupMockDb = () => {
     };
   };
 
-  Resume.findOne = async (query) => {
-    return memoryStore.resumes.find(
-      (r) => String(r._id) === String(query?._id) && String(r.userId) === String(query?.userId)
-    ) || null;
+  Resume.findOne = (query) => {
+    let item;
+    if (query?._id) {
+      item = memoryStore.resumes.find(
+        (r) => String(r._id) === String(query._id) && (!query.userId || String(r.userId) === String(query.userId))
+      ) || null;
+    } else {
+      item = memoryStore.resumes.find(
+        (r) => !query?.userId || String(r.userId) === String(query.userId)
+      ) || null;
+    }
+    return {
+      sort: () => Promise.resolve(item),
+      then: (resolve, reject) => Promise.resolve(item).then(resolve, reject),
+    };
   };
 
   Resume.deleteOne = async (query) => {

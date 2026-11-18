@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import { roadmapData } from '../data/mockData';
 import Card from '../components/Card';
+import Button from '../components/Button';
 import Badge from '../components/Badge';
 import ProgressBar from '../components/ProgressBar';
 import DemoBanner from '../components/DemoBanner';
+import { generateCareerRoadmapAiApi } from '../services/api';
 import {
   Map,
   CheckCircle,
   Circle,
   Clock,
   ChevronRight,
-  BookOpen,
-  ExternalLink,
   Target,
   FolderGit2,
   CheckSquare,
   Square,
   Sparkles,
+  Loader2,
 } from 'lucide-react';
 
 const statusConfig = {
@@ -41,8 +42,16 @@ const statusConfig = {
 };
 
 export default function CareerRoadmap() {
-  const [expandedPhase, setExpandedPhase] = useState(2); // default open in-progress
-  const [completedProjects, setCompletedProjects] = useState(new Set([roadmapData.phases[0].projects?.[0]?.title]));
+  const [activeRoadmap, setActiveRoadmap] = useState(roadmapData);
+  const [targetRoleInput, setTargetRoleInput] = useState(roadmapData.targetRole);
+  const [timelineInput, setTimelineInput] = useState(roadmapData.timelineMonths);
+  const [isGeneratingRoadmap, setIsGeneratingRoadmap] = useState(false);
+  const [roadmapError, setRoadmapError] = useState(null);
+
+  const [expandedPhase, setExpandedPhase] = useState(activeRoadmap.phases[1]?.id ?? 2);
+  const [completedProjects, setCompletedProjects] = useState(
+    new Set([activeRoadmap.phases[0]?.projects?.[0]?.title])
+  );
 
   const toggleProject = (projectTitle) => {
     setCompletedProjects((prev) => {
@@ -53,14 +62,69 @@ export default function CareerRoadmap() {
     });
   };
 
-  // Calculate dynamic progress
-  const totalProjects = roadmapData.phases.reduce((acc, p) => acc + (p.projects?.length || 1), 0);
+  const handleGenerateAiRoadmap = async (e) => {
+    e?.preventDefault();
+    setIsGeneratingRoadmap(true);
+    setRoadmapError(null);
+
+    try {
+      const res = await generateCareerRoadmapAiApi({
+        currentRole: activeRoadmap.currentRole || 'Junior Developer',
+        targetRole: targetRoleInput || 'Full-Stack Developer',
+        timelineMonths: Number(timelineInput) || 6,
+      });
+
+      if (res?.data?.roadmap) {
+        const generated = res.data.roadmap;
+        const mappedPhases = (generated.phases || []).map((p, idx) => ({
+          id: p.phaseNumber || idx + 1,
+          title: p.title,
+          status: idx === 0 ? 'completed' : idx === 1 ? 'in-progress' : 'pending',
+          duration: `${p.durationWeeks} weeks`,
+          skills: p.skillsToMaster || [],
+          projects: (p.projects || []).map((proj) => ({
+            title: proj.title,
+            description: proj.description,
+            techStack: proj.techStack,
+            repoUrl: '#',
+          })),
+          milestones: p.milestones || [],
+          resources: [
+            { title: 'Official Documentation & Guides', type: 'Documentation', url: '#' },
+            { title: 'Interactive Practical Walkthroughs', type: 'Course', url: '#' },
+          ],
+        }));
+
+        setActiveRoadmap({
+          title: generated.title,
+          currentRole: generated.currentRole,
+          targetRole: generated.targetRole,
+          timelineMonths: generated.timelineMonths,
+          overview: generated.overview,
+          phases: mappedPhases,
+          isAiGenerated: res.data.isAiGenerated,
+          model: res.data.model,
+        });
+
+        if (mappedPhases.length > 1) {
+          setExpandedPhase(mappedPhases[1].id);
+        }
+        setCompletedProjects(new Set([mappedPhases[0]?.projects?.[0]?.title]));
+      }
+    } catch (err) {
+      console.error('[Roadmap Generation Error]:', err);
+      setRoadmapError(err.response?.data?.message || err.message);
+    } finally {
+      setIsGeneratingRoadmap(false);
+    }
+  };
+
+  const totalProjects = activeRoadmap.phases.reduce((acc, p) => acc + (p.projects?.length || 1), 0);
   const overallPercentage = Math.round((completedProjects.size / totalProjects) * 100) || 25;
 
   return (
     <div className="min-h-screen bg-[#050d1a] px-4 py-8 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-8 animate-fade-in-up">
-
         {/* Page Header */}
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -69,10 +133,83 @@ export default function CareerRoadmap() {
             </div>
             <h1 className="text-3xl font-bold gradient-text">Career Roadmap</h1>
           </div>
-          <p className="text-slate-400 ml-14">Your personalized path to the next level</p>
+          <p className="text-slate-400 ml-14">
+            AI-generated milestones tailored to your target engineering destination
+          </p>
         </div>
 
         <DemoBanner />
+
+        {/* ── AI Roadmap Generator Toolbar ──────────────────────── */}
+        <Card className="border border-violet-500/30 bg-gradient-to-br from-violet-950/20 via-[#0a1628] to-[#07101e] p-5">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-violet-400" />
+                <h3 className="text-base font-semibold text-slate-100">
+                  Generate Custom AI Roadmap
+                </h3>
+              </div>
+              {activeRoadmap.isAiGenerated && (
+                <Badge variant="violet" size="sm">
+                  Generated with {activeRoadmap.model || 'Gemini 1.5 Flash'}
+                </Badge>
+              )}
+            </div>
+
+            <form onSubmit={handleGenerateAiRoadmap} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Target Engineering Role</label>
+                <input
+                  type="text"
+                  value={targetRoleInput}
+                  onChange={(e) => setTargetRoleInput(e.target.value)}
+                  placeholder="e.g. Senior Full-Stack Engineer"
+                  className="w-full bg-[#050d1a] border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Preparation Timeline</label>
+                <select
+                  value={timelineInput}
+                  onChange={(e) => setTimelineInput(Number(e.target.value))}
+                  className="w-full bg-[#050d1a] border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-violet-500 cursor-pointer"
+                >
+                  <option value={3}>3 Months (Intensive Sprint)</option>
+                  <option value={6}>6 Months (Balanced Track)</option>
+                  <option value={9}>9 Months (Deep Specialization)</option>
+                  <option value={12}>12 Months (Comprehensive Mastery)</option>
+                </select>
+              </div>
+
+              <div>
+                <Button
+                  variant="primary"
+                  type="submit"
+                  disabled={isGeneratingRoadmap}
+                  className="w-full"
+                >
+                  {isGeneratingRoadmap ? (
+                    <>
+                      <Loader2 size={15} className="mr-2 animate-spin" /> Generating with Gemini...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={15} className="mr-2" /> Generate Roadmap
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+
+            {roadmapError && (
+              <p className="text-xs text-red-400 p-2 rounded bg-red-500/10 border border-red-500/30">
+                {roadmapError}
+              </p>
+            )}
+          </div>
+        </Card>
 
         {/* Journey Overview */}
         <Card className="p-6">
@@ -83,22 +220,28 @@ export default function CareerRoadmap() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="text-center p-4 bg-[#0a1628] rounded-xl border border-slate-700/50">
               <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Current Role</p>
-              <p className="text-slate-100 font-semibold">{roadmapData.currentRole}</p>
+              <p className="text-slate-100 font-semibold">{activeRoadmap.currentRole}</p>
             </div>
             <div className="flex items-center justify-center">
               <div className="flex flex-col items-center gap-1">
                 <ChevronRight className="w-6 h-6 text-violet-400 hidden sm:block" />
                 <span className="text-xs text-slate-500 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {roadmapData.timelineMonths} months
+                  {activeRoadmap.timelineMonths} months
                 </span>
               </div>
             </div>
             <div className="text-center p-4 bg-[#0a1628] rounded-xl border border-violet-500/30">
               <p className="text-xs text-violet-400 uppercase tracking-wider mb-1">Target Role</p>
-              <p className="text-slate-100 font-semibold">{roadmapData.targetRole}</p>
+              <p className="text-slate-100 font-semibold">{activeRoadmap.targetRole}</p>
             </div>
           </div>
+
+          {activeRoadmap.overview && (
+            <div className="mt-5 p-3 rounded-xl bg-violet-500/5 border border-violet-500/20 text-xs text-slate-300">
+              {activeRoadmap.overview}
+            </div>
+          )}
 
           {/* Overall progress */}
           <div className="mt-6">
@@ -118,10 +261,10 @@ export default function CareerRoadmap() {
         <div>
           <h2 className="text-lg font-semibold text-slate-100 mb-6">Roadmap Phases & Milestones</h2>
           <div className="relative space-y-0">
-            {roadmapData.phases.map((phase, idx) => {
+            {activeRoadmap.phases.map((phase, idx) => {
               const cfg = statusConfig[phase.status] || statusConfig.pending;
               const isExpanded = expandedPhase === phase.id;
-              const isLast = idx === roadmapData.phases.length - 1;
+              const isLast = idx === activeRoadmap.phases.length - 1;
 
               return (
                 <div key={phase.id} className="flex gap-5">
@@ -178,17 +321,17 @@ export default function CareerRoadmap() {
 
                       {/* Expanded content */}
                       {isExpanded && (
-                        <div className="mt-4 space-y-5 border-t border-slate-700/50 pt-4" onClick={(e) => e.stopPropagation()}>
-                          {/* Skills to Learn */}
+                        <div className="mt-5 space-y-5 border-t border-slate-700/50 pt-5">
+                          {/* Skills to learn */}
                           <div>
-                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium">
-                              Skills to Learn
+                            <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">
+                              Skills to Master
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {phase.skills.map((skill) => (
                                 <span
                                   key={skill}
-                                  className="px-2.5 py-1 text-xs rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30"
+                                  className="text-xs px-2.5 py-1 rounded-lg bg-violet-500/10 text-violet-300 border border-violet-500/20"
                                 >
                                   {skill}
                                 </span>
@@ -196,50 +339,45 @@ export default function CareerRoadmap() {
                             </div>
                           </div>
 
-                          {/* Suggested Hands-on Projects */}
+                          {/* Projects */}
                           {phase.projects && phase.projects.length > 0 && (
                             <div>
-                              <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-medium flex items-center gap-1.5">
-                                <FolderGit2 className="w-3.5 h-3.5 text-cyan-400" /> Suggested Hands-on Projects
+                              <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5">
+                                <FolderGit2 className="w-3.5 h-3.5 text-cyan-400" />
+                                Milestone Projects
                               </p>
-                              <div className="space-y-2">
+                              <div className="space-y-3">
                                 {phase.projects.map((proj) => {
-                                  const isDone = completedProjects.has(proj.title);
+                                  const isChecked = completedProjects.has(proj.title);
                                   return (
                                     <div
                                       key={proj.title}
                                       onClick={() => toggleProject(proj.title)}
-                                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
-                                        isDone
-                                          ? 'bg-emerald-500/5 border-emerald-500/30'
-                                          : 'bg-[#0a1628] border-slate-700/50 hover:border-violet-500/40'
-                                      }`}
+                                      className="p-3.5 rounded-xl bg-[#0a1628] border border-slate-700/60 hover:border-slate-600 transition-colors cursor-pointer"
                                     >
-                                      <button className="mt-0.5 text-slate-400 hover:text-white">
-                                        {isDone ? (
-                                          <CheckSquare className="w-4 h-4 text-emerald-400" />
-                                        ) : (
-                                          <Square className="w-4 h-4 text-slate-500" />
-                                        )}
-                                      </button>
-                                      <div className="flex-1">
-                                        <div className="flex items-center justify-between">
-                                          <span className={`text-sm font-medium ${isDone ? 'line-through text-slate-400' : 'text-slate-100'}`}>
-                                            {proj.title}
-                                          </span>
-                                          <span className={`text-[11px] ${isDone ? 'text-emerald-400 font-semibold' : 'text-slate-500'}`}>
-                                            {isDone ? 'Completed' : 'Click to complete'}
-                                          </span>
-                                        </div>
-                                        <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-                                          {proj.description}
-                                        </p>
-                                        <div className="flex flex-wrap gap-1.5 mt-2">
-                                          {proj.tech?.map((t) => (
-                                            <span key={t} className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                                              {t}
-                                            </span>
-                                          ))}
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex items-start gap-2.5">
+                                          <div className="mt-0.5">
+                                            {isChecked ? (
+                                              <CheckSquare className="w-4 h-4 text-emerald-400" />
+                                            ) : (
+                                              <Square className="w-4 h-4 text-slate-500" />
+                                            )}
+                                          </div>
+                                          <div>
+                                            <p
+                                              className={`text-sm font-semibold transition-all ${
+                                                isChecked
+                                                  ? 'line-through text-slate-500'
+                                                  : 'text-slate-100'
+                                              }`}
+                                            >
+                                              {proj.title}
+                                            </p>
+                                            <p className="text-xs text-slate-400 mt-0.5">
+                                              {proj.description}
+                                            </p>
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
@@ -249,35 +387,20 @@ export default function CareerRoadmap() {
                             </div>
                           )}
 
-                          {/* Resources */}
-                          <div>
-                            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1 font-medium">
-                              <BookOpen className="w-3 h-3" /> Recommended Curated Resources
-                            </p>
-                            <ul className="space-y-1.5">
-                              {phase.resources.map((res) => (
-                                <li key={res.name}>
-                                  <a
-                                    href={res.url}
-                                    className="text-sm text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors"
-                                  >
-                                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                                    {res.name}
-                                  </a>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-
-                          {/* Phase Progress bar */}
-                          {phase.status === 'in-progress' && (
-                            <div className="pt-2">
-                              <ProgressBar
-                                label="Active Phase Progress"
-                                value={60}
-                                color="violet"
-                                showValue={true}
-                              />
+                          {/* Milestones list */}
+                          {phase.milestones && phase.milestones.length > 0 && (
+                            <div>
+                              <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-2">
+                                Checkpoint Milestones
+                              </p>
+                              <ul className="space-y-1.5 text-xs text-slate-300">
+                                {phase.milestones.map((m, mIdx) => (
+                                  <li key={mIdx} className="flex items-start gap-2">
+                                    <CheckCircle className="w-3.5 h-3.5 text-violet-400 mt-0.5 flex-shrink-0" />
+                                    <span>{m}</span>
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           )}
                         </div>
@@ -289,23 +412,6 @@ export default function CareerRoadmap() {
             })}
           </div>
         </div>
-
-        {/* Bottom disclaimer */}
-        <Card className="p-5 border-violet-500/20">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-violet-500/10 rounded-lg flex-shrink-0">
-              <Sparkles className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <h3 className="text-slate-100 font-medium mb-1">AI-Personalized Roadmap</h3>
-              <p className="text-slate-400 text-sm">
-                In the full version, your roadmap will be dynamically generated and updated by AI
-                based on your resume, target roles, and market trends. This is a demo preview with
-                sample data.
-              </p>
-            </div>
-          </div>
-        </Card>
       </div>
     </div>
   );

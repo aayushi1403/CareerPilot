@@ -14,12 +14,14 @@ import Button from '../components/Button';
 import Badge from '../components/Badge';
 import ProgressBar from '../components/ProgressBar';
 import DemoBanner from '../components/DemoBanner';
+import { getSkillGapAnalysisAiApi } from '../services/api';
 
 export default function SkillGapAnalyzer() {
   const [selectedRoleId, setSelectedRoleId] = useState(skillGapData.roles[0].id);
   const [enrolledCourses, setEnrolledCourses] = useState(new Set());
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [planGenerated, setPlanGenerated] = useState(false);
+  const [aiGapData, setAiGapData] = useState(null);
 
   const currentRoleData =
     skillGapData.roles.find((r) => r.id === selectedRoleId) ?? skillGapData.roles[0];
@@ -33,12 +35,28 @@ export default function SkillGapAnalyzer() {
     });
   };
 
-  const handleGeneratePlan = () => {
+  const handleGeneratePlan = async () => {
     setIsGeneratingPlan(true);
-    setTimeout(() => {
-      setIsGeneratingPlan(false);
+    try {
+      const skillsPayload = currentRoleData.currentSkills.map((s) => s.name);
+      const res = await getSkillGapAnalysisAiApi({
+        targetRole: currentRoleData.title,
+        currentSkills: skillsPayload,
+      });
+      if (res?.data?.skillGap) {
+        setAiGapData({
+          ...res.data.skillGap,
+          isAiGenerated: res.data.isAiGenerated,
+          model: res.data.model,
+        });
+      }
       setPlanGenerated(true);
-    }, 1000);
+    } catch (err) {
+      console.warn('[Skill Gap AI Error]:', err.message);
+      setPlanGenerated(true);
+    } finally {
+      setIsGeneratingPlan(false);
+    }
   };
 
   const getPriorityBadge = (importance) => {
@@ -144,18 +162,30 @@ export default function SkillGapAnalyzer() {
 
       {/* Plan Generated Notification */}
       {planGenerated && (
-        <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/30 flex items-start gap-3 animate-fade-in-up">
-          <Sparkles className="w-5 h-5 text-violet-400 mt-0.5 flex-shrink-0" />
-          <div className="text-sm">
-            <p className="font-semibold text-slate-100">
-              AI Action Plan Generated for {currentRoleData.title}
-            </p>
-            <p className="text-slate-400 text-xs mt-0.5">
-              Mastering the top 2 missing skills below will boost your role compatibility from{' '}
-              <strong className="text-violet-400">{currentRoleData.matchPercentage}%</strong> to{' '}
-              <strong className="text-emerald-400">{currentRoleData.matchPercentage + 18}%</strong> in approximately 4–6 weeks.
-            </p>
+        <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/30 flex items-start justify-between gap-3 animate-fade-in-up">
+          <div className="flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-violet-400 mt-0.5 flex-shrink-0" />
+            <div className="text-sm space-y-1">
+              <div className="flex items-center gap-2">
+                <p className="font-semibold text-slate-100">
+                  AI Action Plan Generated for {currentRoleData.title}
+                </p>
+                <Badge variant={aiGapData?.isAiGenerated ? 'violet' : 'neutral'} size="sm">
+                  {aiGapData?.isAiGenerated ? 'Gemini 1.5 Flash' : 'Domain Benchmark'}
+                </Badge>
+              </div>
+              <p className="text-slate-300 text-xs leading-relaxed">
+                {aiGapData?.overallAnalysis ||
+                  `Mastering the top 2 missing skills below will boost your role compatibility from ${currentRoleData.matchPercentage}% to ${currentRoleData.matchPercentage + 18}% in approximately 4–6 weeks.`}
+              </p>
+            </div>
           </div>
+          {aiGapData?.readinessScore !== undefined && (
+            <div className="text-right flex-shrink-0 pl-3 border-l border-violet-500/30">
+              <span className="text-xs text-slate-400">Readiness</span>
+              <p className="text-xl font-bold text-cyan-400">{aiGapData.readinessScore}%</p>
+            </div>
+          )}
         </div>
       )}
 

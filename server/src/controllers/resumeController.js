@@ -2,9 +2,17 @@ import fs from 'fs';
 import Resume from '../models/Resume.js';
 import User from '../models/User.js';
 import { successResponse, errorResponse } from '../utils/apiResponse.js';
+import {
+  extractTextFromFile,
+  parseResumeText,
+  calculateResumeMetrics,
+  createEmptyStructuredData,
+} from '../services/resumeParserService.js';
+import { indexUserResume } from '../services/rag/ragAssistantService.js';
+import { vectorStore, COLLECTIONS } from '../services/rag/chromaVectorStore.js';
 
 /**
- * @desc    Upload resume document
+ * @desc    Upload, extract text, and parse resume document
  * @route   POST /api/resumes/upload
  * @access  Private
  */
@@ -14,12 +22,68 @@ export const uploadResumeDocument = async (req, res, next) => {
       return errorResponse(res, 400, 'Please select a resume file (PDF, DOC, or DOCX) to upload.');
     }
 
-    const { filename, originalname, size, mimetype, path: filePath } = req.file;
+    const { filename, originalname, size, mimetype, path: filePath, buffer } = req.file;
 
-    // Simulate ATS analysis calculation based on file content length/name
-    const simulatedAtsScore = Math.floor(70 + Math.random() * 22); // between 70 and 92
-    const simulatedOverallScore = Math.floor(simulatedAtsScore + (Math.random() * 8 - 4));
+    // 1. Text extraction from file
+    const extractionResult = await extractTextFromFile(filePath, mimetype, buffer);
+    const { rawText, extractionStatus, extractionError, metadata } = extractionResult;
 
+    // 2. Structured parsing and metrics calculation
+    let structuredData = createEmptyStructuredData();
+    let calculatedAtsScore = 75;
+    let calculatedOverallScore = 78;
+    let sections = [];
+    let keywords = { found: [], missing: [] };
+    let status = 'uploaded';
+
+    if (extractionStatus === 'completed') {
+      // Parse sections, contact, skills, education, experience, projects
+      structuredData = parseResumeText(rawText);
+
+      // Calculate ATS metrics and section scores
+      const metrics = calculateResumeMetrics(rawText, structuredData);
+      calculatedAtsScore = metrics.atsScore;
+      calculatedOverallScore = metrics.overallScore;
+      sections = metrics.sections;
+      keywords = metrics.keywords;
+      status = 'analyzed';
+
+      // Update user's cached resumeScore and skills if available
+      try {
+        const updatePayload = { resumeScore: calculatedAtsScore };
+        if (structuredData.skills && structuredData.skills.length > 0) {
+          const user = await User.findById(req.user._id);
+          if (user && (!user.skills || user.skills.length === 0)) {
+            updatePayload.skills = structuredData.skills.slice(0, 8);
+          }
+        }
+        await User.findByIdAndUpdate(req.user._id, updatePayload);
+      } catch (userUpdateErr) {
+        console.warn(`[User Profile Update Warning]: ${userUpdateErr.message}`);
+      }
+    } else if (extractionStatus === 'scanned_or_empty') {
+      calculatedAtsScore = 40;
+      calculatedOverallScore = 45;
+      status = 'uploaded';
+      sections = [
+        {
+          name: 'Text Extraction Alert',
+          score: 40,
+          feedback: extractionError || 'Document is scanned, image-only, or contains no readable text.',
+          suggestions: [
+            'Upload a direct digital export from Google Docs, MS Word, or LaTeX',
+            'Ensure your PDF contains selectable text rather than scanned images',
+          ],
+        },
+      ];
+    } else {
+      // Extraction failed
+      calculatedAtsScore = 30;
+      calculatedOverallScore = 35;
+      status = 'uploaded';
+    }
+
+    // 3. Save resume metadata and structured data in MongoDB
     const newResume = new Resume({
       userId: req.user._id,
       fileName: filename,
@@ -27,19 +91,37 @@ export const uploadResumeDocument = async (req, res, next) => {
       fileSize: size,
       mimeType: mimetype,
       filePath,
-      atsScore: simulatedAtsScore,
-      overallScore: simulatedOverallScore,
-      status: 'analyzed',
+      rawText,
+      extractionStatus,
+      extractionError,
+      metadata,
+      structuredData,
+      atsScore: calculatedAtsScore,
+      overallScore: calculatedOverallScore,
+      status,
+      sections,
+      keywords,
     });
 
     await newResume.save();
 
-    // Update user's cached resumeScore
-    await User.findByIdAndUpdate(req.user._id, {
-      resumeScore: simulatedAtsScore,
-    });
+    // Asynchronously index resume chunks into vector store for RAG
+    if (extractionStatus === 'completed' && rawText) {
+      try {
+        await indexUserResume(newResume);
+      } catch (ragIndexErr) {
+        console.warn(`[RAG Indexing Warning]: ${ragIndexErr.message}`);
+      }
+    }
 
-    return successResponse(res, 201, 'Resume uploaded and analyzed successfully', {
+    const responseMessage =
+      extractionStatus === 'completed'
+        ? 'Resume uploaded, extracted, and analyzed successfully.'
+        : extractionStatus === 'scanned_or_empty'
+        ? 'Resume uploaded, but contains no extractable text (image/scanned document detected).'
+        : 'Resume uploaded with extraction warnings.';
+
+    return successResponse(res, 201, responseMessage, {
       resume: newResume,
     });
   } catch (error) {
@@ -116,6 +198,17 @@ export const deleteResume = async (req, res, next) => {
 
     await Resume.deleteOne({ _id: resume._id });
 
+    // Clean up vector store chunks for this resume
+    try {
+      await vectorStore.deleteDocument(
+        COLLECTIONS.RESUMES,
+        `resume_${resume._id}`,
+        req.user._id.toString()
+      );
+    } catch (ragDelErr) {
+      console.warn(`[RAG Deletion Warning]: ${ragDelErr.message}`);
+    }
+
     return successResponse(res, 200, 'Resume deleted successfully', {
       id: req.params.id,
     });
@@ -123,4 +216,3 @@ export const deleteResume = async (req, res, next) => {
     next(error);
   }
 };
-

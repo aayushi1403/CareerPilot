@@ -13,12 +13,16 @@ import {
   AlertCircle,
   Sparkles,
   Send,
+  Loader2,
+  Compass,
+  TrendingUp,
 } from 'lucide-react';
 import { jobListings, userProfile } from '../data/mockData';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import Badge from '../components/Badge';
 import DemoBanner from '../components/DemoBanner';
+import { getCareerRecommendationsAiApi } from '../services/api';
 
 // ── Match badge color ─────────────────────────────────────────
 const matchVariant = (score) => {
@@ -158,6 +162,37 @@ const JobMatcher = () => {
     });
   };
 
+  // AI Career Recommendations State (LangChain + Gemini)
+  const [aiCareerData, setAiCareerData] = useState(null);
+  const [isAiCareerLoading, setIsAiCareerLoading] = useState(false);
+  const [aiCareerError, setAiCareerError] = useState(null);
+  const [showAiCareerPanel, setShowAiCareerPanel] = useState(false);
+
+  const handleFetchAiCareerRecommendations = async () => {
+    setIsAiCareerLoading(true);
+    setAiCareerError(null);
+    setShowAiCareerPanel(true);
+    try {
+      const res = await getCareerRecommendationsAiApi({
+        skills: userProfile.skills,
+        targetRole: userProfile.targetRole,
+      });
+      if (res?.data?.recommendations) {
+        setAiCareerData({
+          ...res.data.recommendations,
+          isAiGenerated: res.data.isAiGenerated,
+          model: res.data.model,
+          note: res.data.note,
+        });
+      }
+    } catch (err) {
+      console.error('[AI Career Recommendations Error]:', err);
+      setAiCareerError(err.response?.data?.message || err.message);
+    } finally {
+      setIsAiCareerLoading(false);
+    }
+  };
+
   const clearFilters = () => {
     setSearch('');
     setLocationFilter('All');
@@ -215,6 +250,132 @@ const JobMatcher = () => {
           <p className="text-xs text-slate-400 mt-0.5">Top Match</p>
         </div>
       </div>
+
+      {/* ── LangChain & Gemini AI Career Recommendations ──────── */}
+      <Card className="border border-violet-500/30 bg-gradient-to-br from-violet-950/20 via-[#0a1628] to-[#07101e]">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-violet-500/20 text-violet-400">
+                <Compass size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                  Gemini AI Career Trajectory Recommendations
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Analyze your profile to discover highest-compatibility engineering paths
+                </p>
+              </div>
+            </div>
+
+            <Button
+              variant={showAiCareerPanel && aiCareerData ? 'secondary' : 'primary'}
+              size="sm"
+              onClick={handleFetchAiCareerRecommendations}
+              disabled={isAiCareerLoading}
+            >
+              {isAiCareerLoading ? (
+                <>
+                  <Loader2 size={15} className="mr-2 animate-spin" /> Analyzing with Gemini...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={15} className="mr-2" />
+                  {aiCareerData ? 'Refresh Recommendations' : 'Generate AI Career Paths'}
+                </>
+              )}
+            </Button>
+          </div>
+
+          {aiCareerError && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+              {aiCareerError}
+            </div>
+          )}
+
+          {showAiCareerPanel && aiCareerData && (
+            <div className="space-y-4 pt-3 border-t border-slate-700/50">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <p className="text-xs text-slate-400 font-medium">
+                  {aiCareerData.candidateOverview}
+                </p>
+                <Badge variant={aiCareerData.isAiGenerated ? 'violet' : 'neutral'} size="sm">
+                  {aiCareerData.isAiGenerated ? 'Gemini 1.5 Flash' : 'Domain Heuristics'}
+                </Badge>
+              </div>
+
+              {/* Recommended Roles Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {aiCareerData.recommendedRoles?.map((rec, idx) => (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-xl bg-[#0a1628]/90 border border-slate-700/60 hover:border-violet-500/40 transition-all flex flex-col justify-between space-y-3"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-base font-semibold text-slate-100">{rec.title}</h3>
+                        <Badge variant={matchVariant(rec.matchPercentage)} size="sm">
+                          {rec.matchPercentage}% match
+                        </Badge>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs text-cyan-400 font-medium">
+                        <TrendingUp size={13} /> {rec.growthOutlook}
+                      </div>
+
+                      <div className="space-y-1 pt-1">
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Why It Matches You
+                        </p>
+                        <ul className="text-xs text-slate-300 space-y-1">
+                          {rec.reasons?.slice(0, 2).map((r, rIdx) => (
+                            <li key={rIdx} className="flex items-start gap-1.5">
+                              <span className="text-violet-400 mt-0.5">•</span>
+                              <span>{r}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="space-y-1 pt-1">
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Required Skills
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {rec.requiredSkills?.slice(0, 4).map((sk) => (
+                            <span
+                              key={sk}
+                              className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                            >
+                              {sk}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800/80">
+                      <p className="text-[11px] text-violet-300/90 leading-snug">
+                        <span className="font-semibold text-violet-400">Next step: </span>
+                        {rec.suggestedDirection}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Strategic Advice */}
+              {aiCareerData.strategicAdvice && (
+                <div className="p-3.5 rounded-xl bg-violet-500/5 border border-violet-500/20 text-xs text-slate-300 leading-relaxed">
+                  <span className="font-semibold text-violet-300">Strategic Direction: </span>
+                  {aiCareerData.strategicAdvice}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
 
       {/* ── Search & Filter Bar ──────────────────────────────── */}
       <Card padding="sm">

@@ -1,6 +1,7 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,28 +20,50 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `resume-${uniqueSuffix}${ext}`);
+    const randomHex = crypto.randomBytes(12).toString('hex');
+    const safeBaseName = path
+      .basename(file.originalname, ext)
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 30);
+    cb(null, `resume-${Date.now()}-${randomHex}-${safeBaseName}${ext}`);
   },
 });
 
-// File filter (PDF, DOC, DOCX)
+// Strictly allowed extensions and MIME types
+const ALLOWED_EXTENSIONS = new Set(['.pdf', '.docx', '.doc']);
+const ALLOWED_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/octet-stream', // Fallback MIME for some OS/browser uploads
+]);
+
 const fileFilter = (req, file, cb) => {
-  const allowedExtensions = ['.pdf', '.doc', '.docx'];
   const ext = path.extname(file.originalname).toLowerCase();
 
-  const allowedMimeTypes = [
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/octet-stream', // Some browsers send octet-stream for docx
-  ];
-
-  if (allowedExtensions.includes(ext) || allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file format. Only PDF, DOC, and DOCX files are allowed.'), false);
+  // 1. Strict extension check
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return cb(
+      new Error('Invalid file format. Only PDF, DOCX, and DOC files are supported.'),
+      false
+    );
   }
+
+  // 2. Strict MIME type check
+  if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    return cb(
+      new Error('Invalid file MIME type. Only PDF, DOCX, and DOC documents are allowed.'),
+      false
+    );
+  }
+
+  // 3. Prevent executable or malicious double extensions (e.g. resume.pdf.exe)
+  const baseName = path.basename(file.originalname);
+  if (/\.(exe|sh|bat|cmd|vbs|js|php|py|jar|msi)$/i.test(baseName)) {
+    return cb(new Error('Unsafe file upload rejected.'), false);
+  }
+
+  cb(null, true);
 };
 
 const maxSizeBytes = (parseInt(process.env.MAX_FILE_SIZE_MB, 10) || 5) * 1024 * 1024;
@@ -49,7 +72,7 @@ export const uploadResume = multer({
   storage,
   limits: {
     fileSize: maxSizeBytes,
+    files: 1,
   },
   fileFilter,
 });
-

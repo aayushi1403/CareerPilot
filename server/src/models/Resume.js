@@ -10,6 +10,86 @@ const resumeSectionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const educationItemSchema = new mongoose.Schema(
+  {
+    degree: { type: String, default: '' },
+    institution: { type: String, default: '' },
+    year: { type: String, default: '' },
+    gpa: { type: String, default: '' },
+    details: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
+const experienceItemSchema = new mongoose.Schema(
+  {
+    role: { type: String, default: '' },
+    company: { type: String, default: '' },
+    duration: { type: String, default: '' },
+    location: { type: String, default: '' },
+    description: { type: String, default: '' },
+    highlights: [{ type: String }],
+  },
+  { _id: false }
+);
+
+const projectItemSchema = new mongoose.Schema(
+  {
+    title: { type: String, default: '' },
+    description: { type: String, default: '' },
+    techStack: [{ type: String }],
+    link: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
+const structuredDataSchema = new mongoose.Schema(
+  {
+    contact: {
+      name: { type: String, default: '' },
+      email: { type: String, default: '' },
+      phone: { type: String, default: '' },
+      location: { type: String, default: '' },
+      linkedin: { type: String, default: '' },
+      github: { type: String, default: '' },
+    },
+    education: {
+      type: [educationItemSchema],
+      default: [],
+    },
+    skills: {
+      type: [String],
+      default: [],
+    },
+    workExperience: {
+      type: [experienceItemSchema],
+      default: [],
+    },
+    projects: {
+      type: [projectItemSchema],
+      default: [],
+    },
+    certifications: {
+      type: [String],
+      default: [],
+    },
+    achievements: {
+      type: [String],
+      default: [],
+    },
+  },
+  { _id: false }
+);
+
+const resumeMetadataSchema = new mongoose.Schema(
+  {
+    wordCount: { type: Number, default: 0 },
+    characterCount: { type: Number, default: 0 },
+    pageCount: { type: Number, default: 1 },
+  },
+  { _id: false }
+);
+
 const resumeSchema = new mongoose.Schema(
   {
     userId: {
@@ -38,13 +118,34 @@ const resumeSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    rawText: {
+      type: String,
+      default: '',
+    },
+    extractionStatus: {
+      type: String,
+      enum: ['completed', 'scanned_or_empty', 'failed'],
+      default: 'completed',
+    },
+    extractionError: {
+      type: String,
+      default: null,
+    },
+    metadata: {
+      type: resumeMetadataSchema,
+      default: () => ({ wordCount: 0, characterCount: 0, pageCount: 1 }),
+    },
+    structuredData: {
+      type: structuredDataSchema,
+      default: () => ({}),
+    },
     atsScore: {
       type: Number,
-      default: 78,
+      default: 75,
     },
     overallScore: {
       type: Number,
-      default: 82,
+      default: 78,
     },
     status: {
       type: String,
@@ -53,41 +154,16 @@ const resumeSchema = new mongoose.Schema(
     },
     sections: {
       type: [resumeSectionSchema],
-      default: [
-        {
-          name: 'Work Experience',
-          score: 85,
-          feedback: 'Strong descriptions with quantifiable impact. Good use of action verbs.',
-          suggestions: ['Add more metrics to recent achievements', 'Highlight leadership responsibilities'],
-        },
-        {
-          name: 'Skills',
-          score: 80,
-          feedback: 'Good breadth of technical skills. Missing some in-demand cloud and testing tools.',
-          suggestions: ['Add Next.js & Docker', 'Include testing frameworks (Vitest/Jest)'],
-        },
-        {
-          name: 'Education',
-          score: 90,
-          feedback: 'Education section is complete and well formatted.',
-          suggestions: ['Add relevant online certifications or honors'],
-        },
-        {
-          name: 'Formatting & ATS',
-          score: 74,
-          feedback: 'Clean typography; ensure standard headings for optimal ATS parsing.',
-          suggestions: ['Use standard single-column layout', 'Avoid graphics or complex table structures'],
-        },
-      ],
+      default: [],
     },
     keywords: {
       found: {
         type: [String],
-        default: ['React', 'JavaScript', 'TypeScript', 'Node.js', 'REST API', 'Git', 'CSS', 'HTML5'],
+        default: [],
       },
       missing: {
         type: [String],
-        default: ['Next.js', 'CI/CD', 'Docker', 'PostgreSQL', 'Testing (Vitest)'],
+        default: [],
       },
     },
   },
@@ -98,4 +174,3 @@ const resumeSchema = new mongoose.Schema(
 
 const Resume = mongoose.model('Resume', resumeSchema);
 export default Resume;
-

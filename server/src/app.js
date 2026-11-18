@@ -11,6 +11,8 @@ import resumeRoutes from './routes/resumeRoutes.js';
 import roadmapRoutes from './routes/roadmapRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
+import ragRoutes from './routes/ragRoutes.js';
 
 // Middleware imports
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
@@ -70,6 +72,8 @@ app.use('/api/resumes', resumeRoutes);
 app.use('/api/roadmaps', roadmapRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/ai', aiRoutes);
+app.use('/api/rag', ragRoutes);
 
 // Error Handling Middlewares
 app.use(notFound);

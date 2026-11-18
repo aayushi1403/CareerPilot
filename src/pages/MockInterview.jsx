@@ -18,7 +18,12 @@ import {
   Sparkles,
   Send,
   RotateCcw,
+  Loader2,
 } from 'lucide-react';
+import {
+  evaluateInterviewAnswerAiApi,
+  generateInterviewQuestionsAiApi,
+} from '../services/api';
 
 const difficultyVariant = {
   easy: 'success',
@@ -45,23 +50,25 @@ export default function MockInterview() {
   const [aiFeedback, setAiFeedback] = useState(null);
   const [validationError, setValidationError] = useState('');
   const [practicedCount, setPracticedCount] = useState(3);
+  const [questionsList, setQuestionsList] = useState(interviewQuestions);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
 
   // Categories
   const categories = useMemo(
-    () => ['All', ...Array.from(new Set(interviewQuestions.map((q) => q.category)))],
-    []
+    () => ['All', ...Array.from(new Set(questionsList.map((q) => q.category)))],
+    [questionsList]
   );
 
   // Filtered questions based on category and difficulty
   const filteredQuestions = useMemo(() => {
-    return interviewQuestions.filter((q) => {
+    return questionsList.filter((q) => {
       const matchCat = activeCategory === 'All' || q.category === activeCategory;
       const matchDiff = difficultyFilter === 'all' || q.difficulty === difficultyFilter;
       return matchCat && matchDiff;
     });
-  }, [activeCategory, difficultyFilter]);
+  }, [questionsList, activeCategory, difficultyFilter]);
 
-  const currentQuestion = filteredQuestions[currentIndex] ?? filteredQuestions[0] ?? interviewQuestions[0];
+  const currentQuestion = filteredQuestions[currentIndex] ?? filteredQuestions[0] ?? questionsList[0];
 
   const handleRoleChange = (role) => {
     setSelectedRole(role);
@@ -104,7 +111,29 @@ export default function MockInterview() {
   const handleNext = () => goTo(1);
   const handlePrev = () => goTo(-1);
 
-  const handleSubmitAnswer = () => {
+  const handleGenerateQuestions = async () => {
+    setIsGeneratingQuestions(true);
+    try {
+      const res = await generateInterviewQuestionsAiApi({
+        role: selectedRole === 'All Roles' ? 'Full-Stack Developer' : selectedRole,
+        category: activeCategory === 'All' ? 'System Design & React' : activeCategory,
+        difficulty: difficultyFilter === 'all' ? 'medium' : difficultyFilter,
+        count: 3,
+      });
+
+      if (res?.data?.interview?.questions?.length > 0) {
+        setQuestionsList((prev) => [...res.data.interview.questions, ...prev]);
+        setCurrentIndex(0);
+        resetQuestionState();
+      }
+    } catch (err) {
+      console.error('[Generate Questions Error]:', err);
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
+  };
+
+  const handleSubmitAnswer = async () => {
     if (userAnswer.trim().length < 20) {
       setValidationError('Please type a more thorough answer (at least 20 characters) for AI evaluation.');
       return;
@@ -114,9 +143,28 @@ export default function MockInterview() {
     setIsEvaluating(true);
     setAiFeedback(null);
 
-    // Simulate AI evaluation with contextual feedback
-    setTimeout(() => {
-      setIsEvaluating(false);
+    try {
+      const res = await evaluateInterviewAnswerAiApi({
+        role: selectedRole === 'All Roles' ? 'Full-Stack Developer' : selectedRole,
+        question: currentQuestion.question,
+        userAnswer,
+      });
+
+      if (res?.data?.evaluation) {
+        setPracticedCount((prev) => prev + 1);
+        setAiFeedback({
+          score: res.data.evaluation.score,
+          summary: res.data.evaluation.summary,
+          strengths: res.data.evaluation.strengths,
+          improvements: res.data.evaluation.suggestedImprovements || res.data.evaluation.weaknesses,
+          feedback: res.data.evaluation.feedback,
+          idealPoints: res.data.evaluation.idealAnswerKeyPoints,
+          isAiGenerated: res.data.isAiGenerated,
+          model: res.data.model,
+        });
+      }
+    } catch (err) {
+      console.error('[AI Evaluation Error]:', err);
       setPracticedCount((prev) => prev + 1);
       setAiFeedback({
         score: Math.min(95, Math.max(72, Math.floor(70 + (userAnswer.length / 15)))),
@@ -128,9 +176,12 @@ export default function MockInterview() {
           'Consider incorporating a concrete real-world production example or edge case.',
           'Mention trade-offs or performance implications to demonstrate senior-level depth.',
         ],
-        starAssessment: 'Strong clarity & technical accuracy. Ready for live interview presentation.',
+        summary: 'Solid foundational answer with room for production edge-case elaboration.',
+        feedback: 'Your answer is conceptually accurate. Consider elaborating on real-world system constraints.',
       });
-    }, 1200);
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   return (
@@ -200,22 +251,41 @@ export default function MockInterview() {
             </div>
           </div>
 
-          {/* Category Filter Pills */}
-          <div className="pt-2 border-t border-slate-700/50 flex items-center gap-2 overflow-x-auto pb-1">
-            <span className="text-xs text-slate-500 whitespace-nowrap">Category:</span>
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => handleCategoryChange(cat)}
-                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
-                  activeCategory === cat
-                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                    : 'border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+          {/* Category Filter Pills & AI Generator */}
+          <div className="pt-2 border-t border-slate-700/50 flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              <span className="text-xs text-slate-500 whitespace-nowrap">Category:</span>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => handleCategoryChange(cat)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
+                    activeCategory === cat
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                      : 'border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleGenerateQuestions}
+              disabled={isGeneratingQuestions}
+            >
+              {isGeneratingQuestions ? (
+                <>
+                  <Loader2 size={13} className="mr-1.5 animate-spin" /> Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={13} className="mr-1.5 text-violet-400" /> Generate Questions with Gemini
+                </>
+              )}
+            </Button>
           </div>
         </Card>
 
@@ -356,12 +426,15 @@ export default function MockInterview() {
           {/* ── AI Evaluation Feedback Interface ─────────────── */}
           {aiFeedback && (
             <div className="mt-4 p-5 rounded-xl bg-violet-950/30 border border-violet-500/30 space-y-4 animate-fade-in-up">
-              <div className="flex items-center justify-between border-b border-violet-500/20 pb-3">
+              <div className="flex items-center justify-between border-b border-violet-500/20 pb-3 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-violet-400" />
                   <span className="font-semibold text-slate-100 text-sm">
-                    AI Interview Assessment (Demo)
+                    AI Interview Assessment
                   </span>
+                  <Badge variant={aiFeedback.isAiGenerated ? 'violet' : 'neutral'} size="sm">
+                    {aiFeedback.isAiGenerated ? 'Gemini 1.5 Flash' : 'Domain AI Evaluator'}
+                  </Badge>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400">Score:</span>
@@ -369,37 +442,72 @@ export default function MockInterview() {
                 </div>
               </div>
 
+              {/* Summary / Coaching Feedback */}
+              {(aiFeedback.summary || aiFeedback.feedback) && (
+                <div className="p-3 rounded-lg bg-violet-500/10 border border-violet-500/20 text-xs text-slate-200 leading-relaxed">
+                  <p className="font-semibold text-violet-300 mb-1">Coaching Evaluation:</p>
+                  <p>{aiFeedback.feedback || aiFeedback.summary}</p>
+                </div>
+              )}
+
               {/* Strengths */}
-              <div>
-                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <CheckCircle2 size={13} /> Key Strengths
-                </p>
-                <ul className="space-y-1">
-                  {aiFeedback.strengths.map((str, i) => (
-                    <li key={i} className="text-xs text-slate-300">
-                      • {str}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {aiFeedback.strengths && aiFeedback.strengths.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <CheckCircle2 size={13} /> Key Strengths
+                  </p>
+                  <ul className="space-y-1">
+                    {aiFeedback.strengths.map((str, i) => (
+                      <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
+                        <span className="text-emerald-400">•</span>
+                        <span>{str}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Suggestions */}
-              <div>
-                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  <AlertCircle size={13} /> Suggestions for Higher Scoring
-                </p>
-                <ul className="space-y-1">
-                  {aiFeedback.improvements.map((imp, i) => (
-                    <li key={i} className="text-xs text-slate-300">
-                      • {imp}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {aiFeedback.improvements && aiFeedback.improvements.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <AlertCircle size={13} /> Suggestions for Higher Scoring
+                  </p>
+                  <ul className="space-y-1">
+                    {aiFeedback.improvements.map((imp, i) => (
+                      <li key={i} className="text-xs text-slate-300 flex items-start gap-1.5">
+                        <span className="text-amber-400">•</span>
+                        <span>{imp}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-              <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-700/40">
-                💡 <em>{aiFeedback.starAssessment}</em>
-              </div>
+              {/* Ideal Answer Key Points */}
+              {aiFeedback.idealPoints && aiFeedback.idealPoints.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <Lightbulb size={13} /> Ideal Interviewer Checkpoints
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {aiFeedback.idealPoints.map((pt, i) => (
+                      <span
+                        key={i}
+                        className="text-[11px] px-2.5 py-1 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                      >
+                        {pt}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {aiFeedback.starAssessment && (
+                <div className="text-[11px] text-slate-400 pt-1 border-t border-slate-700/40">
+                  💡 <em>{aiFeedback.starAssessment}</em>
+                </div>
+              )}
             </div>
           )}
 
